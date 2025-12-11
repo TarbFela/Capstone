@@ -57,32 +57,42 @@ void other_core() {
     //irq_set_priority (ADC_IRQ_FIFO, PICO_HIGHEST_IRQ_PRIORITY);
     //irq_set_enabled(ADC_IRQ_FIFO, true);
     while(1) {
-        multicore_fifo_pop_blocking();
+        while(multicore_fifo_pop_blocking()!=1); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
         adc_run(true);
         float y_k = 0.0f;
         float sample_amps, err;
         int d;
+
         int i = 0;
+        printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
         while(!multicore_fifo_rvalid()) {
             sample_amps = (float)adc_fifo_get_blocking() * 3.3 / (4096.0*0.05);
             err = PI_setpoint - sample_amps;
             y_k += err / 48000.0; // 48ksps
-            if(y_k>25) y_k=25;
-            else if(y_k<-25) y_k=-25;
+            if(y_k>10) y_k=10;
+            else if(y_k<-10) y_k=-10;
             d = (uint16_t)(1000.0*y_k*0.4167777 + 1000.0*err*0.000416777);
             if(d>300) d=300;
             else if(d<110) d=110;
             pwm_set_gpio_level(PWM1_GPIO_PIN,d);
             pwm_set_gpio_level(PWM3_GPIO_PIN,d);
-            if(!((i++)&0xFFFF)) printf("%04d %0.3f %0.3f\n",d, sample_amps,y_k);
+
+            if(!((++i)%0x3FFFF)) printf("DUTY: %0.1f%% MEASURED: %0.3f Amps INTEGRATOR: %0.3f\n",(float)(d)/10, sample_amps,y_k);
+
         }
+        multicore_fifo_drain();
+        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+        printf("[CL control paused, all outputs to 0]\n");
     }
 
 }
 
 int main(void) {
     stdio_init_all();
-    sleep_ms(5000);
+    sleep_ms(1000);
 
     multicore_launch_core1(other_core);
     sleep_ms(1000);
@@ -102,61 +112,25 @@ int main(void) {
     char ui = 0;
     int latch = 0;
     int pi_en_latch = 0;
-    uint16_t D1_thresh = 100;
-    uint16_t D1_thresh_setting_offset = 100;
-    uint16_t D1_thresh_setting_multiplier = 2;
+    float D1_thresh = 10.0;
+    float D1_thresh_setting_multiplier = 2.0;
     while(1) {
         scanf("%c",&ui);
         if(ui=='q') break;
-        if(ui == ' ') {
-            if(latch) {
-                latch = 0;
-                pwm_set_gpio_level(PWM1_GPIO_PIN, 0);
-                pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
-                pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
-                pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
-                printf("PWM OFF\n");
-            }
-            else {
-                latch = 1;
-                pwm_set_gpio_level(PWM1_GPIO_PIN, D1_thresh);
-                pwm_set_gpio_level(PWM2_GPIO_PIN, 100);
-                pwm_set_gpio_level(PWM3_GPIO_PIN, D1_thresh);
-                pwm_set_gpio_level(PWM4_GPIO_PIN, 100);
-                printf("PWM ON, D = %.2f\n",100.0*(float)D1_thresh/1000);
-            }
-        }
-        if(ui == 'o') {
-            if(D1_thresh_setting_offset) {
-                D1_thresh_setting_offset = 0;
-                printf("BIAS SET TO 0 \n");
-            }
-            else {
-                D1_thresh_setting_offset = 100;
-                printf("BIAS SET TO 50 \n");
-            }
-        }
+
         if(ui == 'm') {
             D1_thresh_setting_multiplier = D1_thresh_setting_multiplier*1.5 + 1;
             if(D1_thresh_setting_multiplier>100) D1_thresh_setting_multiplier=1;
-            printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
+            printf("MULTIPLIER SET TO %0.2f\n",D1_thresh_setting_multiplier);
         }
         if(ui >= '0' && ui <= '9') {
-            D1_thresh = ((uint16_t)ui - '0')*D1_thresh_setting_multiplier + D1_thresh_setting_offset;
-            printf("D = %.2f\n",100.0*(float)D1_thresh/1000);
-            if(latch) {
-                pwm_set_gpio_level(PWM1_GPIO_PIN, D1_thresh);
-                pwm_set_gpio_level(PWM3_GPIO_PIN,D1_thresh);
-            }
+            PI_setpoint = ((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
+            printf("PI setpoint: %0.3fA\n",PI_setpoint);
         }
         if(ui == 'p' || ui == 'l') {
-            if(ui=='p') D1_thresh+= D1_thresh_setting_multiplier/4;
-            if(ui=='l') D1_thresh+= -D1_thresh_setting_multiplier/4;
-            printf("D = %.2f\n",100.0*(float)D1_thresh/1000);
-            if(latch) {
-                pwm_set_gpio_level(PWM1_GPIO_PIN, D1_thresh);
-                pwm_set_gpio_level(PWM3_GPIO_PIN,D1_thresh);
-            }
+            if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/4;
+            if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/4;
+            printf("PI setpoint: %0.3fA\n",PI_setpoint);
         }
         if(ui == 'i') {
             printf("Writing to INA236...\n");
@@ -200,7 +174,10 @@ int main(void) {
             printf("ADC value: %d\n",((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]));
             free(INA236_read_dst);
         }
-        if(ui == 'w') {
+        if(ui == ' ') {
+            multicore_fifo_push_blocking(1);
+        }
+        if(ui == 'r') {
             multicore_fifo_push_blocking(0);
         }
     }
