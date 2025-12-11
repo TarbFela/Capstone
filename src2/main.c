@@ -28,7 +28,7 @@
 
 #define ADC_BUFFER_SIZE 16
 
-float PI_setpoint = 10.0;
+int PI_setpoint = 10;
 
 void other_core() {
     multicore_fifo_push_blocking(0xBEEF);
@@ -59,26 +59,34 @@ void other_core() {
     while(1) {
         while(multicore_fifo_pop_blocking()!=1); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
         adc_run(true);
-        float y_k = 0.0f;
-        float sample_amps, err;
+
+        int sample;
+        // "IS" refers to "integer scaling" where I am scaling up the values to improve precision in stored values, which are bit-shifted down to usbale duty cycle values.
+        // "IS" variables *already factor in* PI constants (ki = 0.41677, kp = 0.00041677)
+        int err_IS;
+        int y_k_IS = 0;
+        int d_IS;
         int d;
 
         int i = 0;
         printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
         while(!multicore_fifo_rvalid()) {
-            sample_amps = (float)adc_fifo_get_blocking() * 3.3 / (4096.0*0.05);
-            err = PI_setpoint - sample_amps;
-            y_k += err / 48000.0; // 48ksps
-            if(y_k>10) y_k=10;
-            else if(y_k<-10) y_k=-10;
-            d = (uint16_t)(1000.0*y_k*0.4167777 + 1000.0*err*0.000416777);
-            if(d>300) d=300;
-            else if(d<110) d=110;
+            sample = (int)adc_fifo_get_blocking();
+            y_k_IS += 569*PI_setpoint - 9*sample;
+            if(y_k_IS>3276800) y_k_IS=3276800;
+            if(y_k_IS<-3276800) y_k_IS=-3276800;
+            d_IS = y_k_IS + 27314*PI_setpoint - 440*sample;
+            d = d_IS>>16;
+
+            if(!((++i)%0x3FFFF)) {
+                printf("d: %04d ykIS: %08d Imeas: %0.3fA\n",d,y_k_IS,(float)sample * 20.0*3.3/4096.0);
+            }
+
+            if(d>330) d = 330;
+            if(d<110) d = 110;
+
             pwm_set_gpio_level(PWM1_GPIO_PIN,d);
             pwm_set_gpio_level(PWM3_GPIO_PIN,d);
-
-            if(!((++i)%0x3FFFF)) printf("DUTY: %0.1f%% MEASURED: %0.3f Amps INTEGRATOR: %0.3f\n",(float)(d)/10, sample_amps,y_k);
-
         }
         multicore_fifo_drain();
         pwm_set_gpio_level(PWM1_GPIO_PIN,0);
@@ -112,25 +120,24 @@ int main(void) {
     char ui = 0;
     int latch = 0;
     int pi_en_latch = 0;
-    float D1_thresh = 10.0;
-    float D1_thresh_setting_multiplier = 2.0;
+    int D1_thresh = 10;
+    int D1_thresh_setting_multiplier = 2;
     while(1) {
         scanf("%c",&ui);
         if(ui=='q') break;
 
         if(ui == 'm') {
-            D1_thresh_setting_multiplier = D1_thresh_setting_multiplier*1.5 + 1;
-            if(D1_thresh_setting_multiplier>100) D1_thresh_setting_multiplier=1;
-            printf("MULTIPLIER SET TO %0.2f\n",D1_thresh_setting_multiplier);
+            if((++D1_thresh_setting_multiplier)>6) D1_thresh_setting_multiplier=1;
+            printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
         }
         if(ui >= '0' && ui <= '9') {
             PI_setpoint = ((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
-            printf("PI setpoint: %0.3fA\n",PI_setpoint);
+            printf("PI setpoint: %dA\n",PI_setpoint);
         }
         if(ui == 'p' || ui == 'l') {
             if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/4;
             if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/4;
-            printf("PI setpoint: %0.3fA\n",PI_setpoint);
+            printf("PI setpoint: %dA\n",PI_setpoint);
         }
         if(ui == 'i') {
             printf("Writing to INA236...\n");
