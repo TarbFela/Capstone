@@ -26,12 +26,16 @@ target_include_directories(capstone_pwm
 )
 
 target_link_libraries(capstone_pwm
-	pico_stdlib
-	hardware_spi
-	hardware_i2c
-	hardware_pwm
-	hardware_gpio
-	pico_bootrom)
+		pico_stdlib
+		hardware_spi
+		hardware_dma
+		hardware_adc
+		hardware_i2c
+		hardware_pwm
+		hardware_gpio
+		pico_bootrom
+		pico_multicore
+)
 
 pico_enable_stdio_usb(capstone_pwm 1)
 pico_enable_stdio_uart(capstone_pwm 0)
