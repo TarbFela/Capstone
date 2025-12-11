@@ -28,6 +28,8 @@
 
 #define ADC_BUFFER_SIZE 16
 
+float PI_setpoint = 10.0;
+
 void other_core() {
     multicore_fifo_push_blocking(0xBEEF);
     printf("MULTICORE EXPLOSION!!!\n");
@@ -37,37 +39,43 @@ void other_core() {
     adc_select_input(ISNS_ADC_PIN-26);
     adc_fifo_setup(
             true,    // Write each completed conversion to the sample FIFO
-            true,    // Enable DMA data request (DREQ)
+            false,//true,    // Enable DMA data request (DREQ)
             1,       // DREQ (and IRQ) asserted when at least 1 sample present
             false,   // We won't see the ERR bit because of 8 bit reads; disable.
             false     // Shift each sample to 8 bits when pushing to FIFO?
     );
 
     //100Hz
-    adc_set_clkdiv(ADC_BASE_CLOCK_HZ/100);
+    adc_set_clkdiv(ADC_BASE_CLOCK_HZ/48000);
 
-    uint16_t *adc_buffer;
-    adc_buffer = (uint16_t *)malloc(sizeof(uint16_t)*ADC_BUFFER_SIZE);
-    if(adc_buffer == NULL) printf("BAD MALLOC!!!\n");
-    uint adc_dma_channel = dma_claim_unused_channel(true);
+    //uint16_t *adc_buffer;
+    //adc_buffer = (uint16_t *)malloc(sizeof(uint16_t)*ADC_BUFFER_SIZE);
+    //if(adc_buffer == NULL) printf("BAD MALLOC!!!\n");
+    //uint adc_dma_channel = dma_claim_unused_channel(true);
+
+    //irq_set_exclusive_handler(ADC_IRQ_FIFO, PI_controller);
+    //irq_set_priority (ADC_IRQ_FIFO, PICO_HIGHEST_IRQ_PRIORITY);
+    //irq_set_enabled(ADC_IRQ_FIFO, true);
     while(1) {
         multicore_fifo_pop_blocking();
-        adc_run(false);
-        dma_channel_config cfg = dma_channel_get_default_config(adc_dma_channel);
-        channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
-        channel_config_set_read_increment(&cfg, false);
-        channel_config_set_write_increment(&cfg, true);
-        channel_config_set_dreq(&cfg, DREQ_ADC);
-        dma_channel_configure(adc_dma_channel, &cfg,
-                              adc_buffer,    // dst
-                              &adc_hw->fifo,  // src
-                              ADC_BUFFER_SIZE,  // transfer count
-                              false            // DON'T start immediately
-        );
         adc_run(true);
-        dma_channel_start(adc_dma_channel);
-        dma_channel_wait_for_finish_blocking(adc_dma_channel);
-        multicore_fifo_push_blocking((uint32_t)adc_buffer);
+        float y_k = 0.0f;
+        float sample_amps, err;
+        int d;
+        int i = 0;
+        while(!multicore_fifo_rvalid()) {
+            sample_amps = (float)adc_fifo_get_blocking() * 3.3 / (4096.0*0.05);
+            err = PI_setpoint - sample_amps;
+            y_k += err / 48000.0; // 48ksps
+            if(y_k>25) y_k=25;
+            else if(y_k<-25) y_k=-25;
+            d = (uint16_t)(1000.0*y_k*0.4167777 + 1000.0*err*0.000416777);
+            if(d>300) d=300;
+            else if(d<110) d=110;
+            pwm_set_gpio_level(PWM1_GPIO_PIN,d);
+            pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+            if(!((i++)&0xFFFF)) printf("%04d %0.3f %0.3f\n",d, sample_amps,y_k);
+        }
     }
 
 }
@@ -80,7 +88,7 @@ int main(void) {
     sleep_ms(1000);
     multicore_fifo_pop_blocking();
 
-    sleep_ms(5000);
+    //sleep_ms(5000);
 
     capstone_pwm_init();
     printf("Hello Capstone World!\n");
@@ -93,6 +101,7 @@ int main(void) {
 
     char ui = 0;
     int latch = 0;
+    int pi_en_latch = 0;
     uint16_t D1_thresh = 100;
     uint16_t D1_thresh_setting_offset = 100;
     uint16_t D1_thresh_setting_multiplier = 2;
@@ -193,15 +202,7 @@ int main(void) {
         }
         if(ui == 'w') {
             multicore_fifo_push_blocking(0);
-            uint16_t *buffer = (uint16_t *)multicore_fifo_pop_blocking();
-            printf("SAMPLES:\n\t");
-            for(int i =0; i<ADC_BUFFER_SIZE; i++) {
-                printf("%04d ",buffer[i]);
-                if(!((i+1)%4)) printf("\n\t");
-            }
-            printf("\n");
         }
-
     }
 
     reboot:
