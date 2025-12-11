@@ -73,8 +73,8 @@ void other_core() {
         while(!multicore_fifo_rvalid()) {
             sample = (int)adc_fifo_get_blocking();
             y_k_IS += 569*PI_setpoint - 9*sample;
-            if(y_k_IS>3276800) y_k_IS=3276800;
-            if(y_k_IS<-3276800) y_k_IS=-3276800;
+            if(y_k_IS>500000000) y_k_IS=5000000;
+            if(y_k_IS<-500000000) y_k_IS=-5000000;
             d_IS = y_k_IS + 27314*PI_setpoint - 440*sample;
             d = d_IS>>16;
 
