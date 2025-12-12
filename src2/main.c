@@ -34,8 +34,8 @@
 #define ADC_BUFFER_SIZE 2048
 #define ADC_BUFFER_SIZE_WRAP_MASK 0x7FF
 
-int PI_setpoint = 15;
-
+int PI_setpoint = 10;
+PI_controller_t current_controller;
 
 
 void other_core() {
@@ -61,7 +61,7 @@ void other_core() {
     // So, actual order is: ISNS, TSNS, ISNS, TSNS, [...]
     adc_set_round_robin(0x1<<(ISNS_ADC_PIN-26) | 0x1<<(TSNS_ADC_PIN-26));
     // 96kHz = 48MHz / 500
-    adc_set_clkdiv(500);
+    adc_set_clkdiv(1000);
 
     uint *adc_dma_daisy_chain;
     adc_dma_daisy_chain = (uint *)malloc(sizeof(uint)*2);
@@ -74,9 +74,9 @@ void other_core() {
     adc_dma_daisy_chain_hw[0] = &dma_hw->ch[adc_dma_daisy_chain[0]];
     adc_dma_daisy_chain_hw[1] = &dma_hw->ch[adc_dma_daisy_chain[1]];
 
-    PI_controller_t current_controller;
+
     PI_controller_init(&current_controller,
-                       5,
+                       PI_setpoint,
                        569,
                        9,
                        27314,
@@ -132,6 +132,12 @@ void other_core() {
 
         adc_run(true);
         dma_channel_start(adc_dma_daisy_chain[0]);
+
+        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+
         while(!multicore_fifo_rvalid()) {
             while(samples_processed_inv > adc_dma_daisy_chain_hw[dma_rr_i]->transfer_count);
             sample_processors[samples_processed_inv&0x1](
@@ -145,11 +151,15 @@ void other_core() {
                 adc_dma_daisy_chain_hw[dma_rr_i]->write_addr = (uintptr_t) adc_dma_buffer;
                 dma_rr_i = 1 - dma_rr_i;
                 samples_processed_inv = ADC_BUFFER_SIZE;
+
+                current_controller.PI_SP = PI_setpoint;
                 //printf("W\n");
                 iii++;
-                if(!(iii&0x3F)) {
-                    printf("D%d\ns[%d]%d\ns[%d]%d\n\n",current_controller.d,ADC_BUFFER_SIZE-2,adc_dma_buffer[ADC_BUFFER_SIZE-2],ADC_BUFFER_SIZE-1,adc_dma_buffer[ADC_BUFFER_SIZE-1]);
+                if(!(iii&0x3)) {
+                    printf("D%d\n",current_controller.d);
+                    printf("Y%d\n",current_controller.y_k_IS);
                 }
+                //current_controller.PI_SP = PI_setpoint;
             }
 
             //

@@ -8,12 +8,21 @@
 
 
 void process_ISNS(uint16_t *sample, void *other_stuff) {
-    PI_controller_t *pic = (PI_controller_t *)(other_stuff);
-    PI_controller_DSP(pic, *sample);
-    int d = pic->d;
-    if(d>250 || d<100) return;
+    static int y_k_IS = 0;
+    int PI_setpoint = ((PI_controller_t *)(other_stuff))->PI_SP;
+    y_k_IS += 569*PI_setpoint - 9*(*sample);
+    if(y_k_IS>500000000) y_k_IS=500000000;
+    if(y_k_IS<-500000000) y_k_IS=-500000000;
+    int d_IS = y_k_IS + 27314*PI_setpoint - 440*(*sample);
+    int d = d_IS>>16;
+
+    if(d>320) d = 320;
+    if(d<110) d = 110;
+
     pwm_set_gpio_level(PWM1_GPIO_PIN,d);
     pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+    ((PI_controller_t *)(other_stuff))->d = d;
+    ((PI_controller_t *)(other_stuff))->y_k_IS = y_k_IS;
 }
 void process_TSNS(uint16_t *sample, void *other_stuff) {
 }
@@ -39,16 +48,24 @@ void PI_controller_init(PI_controller_t *pic,
 }
 
 void PI_controller_DSP(PI_controller_t *pic, uint16_t sample) {
-    pic->y_k_IS += pic->y_k_IS_SP_scalar * pic->PI_SP + pic->y_k_IS_ADC_scalar * sample;
-    if(pic->y_k_IS > pic->y_k_IS_abs_bounds) pic->y_k_IS = pic->y_k_IS_abs_bounds;
-    if(pic->y_k_IS < -pic->y_k_IS_abs_bounds) pic->y_k_IS = -pic->y_k_IS_abs_bounds;
+//
+//    pic->y_k_IS += pic->y_k_IS_SP_scalar * pic->PI_SP - pic->y_k_IS_ADC_scalar * sample;
+//    if(pic->y_k_IS > pic->y_k_IS_abs_bounds) pic->y_k_IS = pic->y_k_IS_abs_bounds;
+//    if(pic->y_k_IS < -pic->y_k_IS_abs_bounds) pic->y_k_IS = -pic->y_k_IS_abs_bounds;
+//
+//    pic->d_IS = pic->y_k_IS + pic->err_k_IS_SP_scalar * pic->PI_SP - pic->err_k_IS_ADC_scalar * sample;
+//    int d = (pic->d_IS >> 16);
+//    if(d > pic->d_bound_upper) d = pic->d_bound_upper;
+//    if(d < pic->d_bound_lower) d = pic->d_bound_lower;
 
-    pic->d_IS = pic->y_k_IS + pic->err_k_IS_SP_scalar * pic->PI_SP - pic->err_k_IS_ADC_scalar * sample;
-    int d = (pic->d_IS >> 16);
-    if(d > pic->d_bound_upper) d = pic->d_bound_upper;
-    if(d < pic->d_bound_lower) d = pic->d_bound_lower;
-
-    pic->d = d;
+//    pic->d = d;
+    pic->y_k_IS += 569*pic->PI_SP - 9*sample;
+    if(pic->y_k_IS>500000000) pic->y_k_IS=500000000;
+    if(pic->y_k_IS<-500000000) pic->y_k_IS=-500000000;
+    pic->d_IS = pic->y_k_IS + 27314*pic->PI_SP - 440*sample;
+    pic->d = pic->d_IS>>16;
+    if(pic->d>330) pic->d = 200;
+    if(pic->d<110) pic->d = 110;
     /*
             y_k_IS += 569*PI_setpoint - 9*sample;
             if(y_k_IS>500000000) y_k_IS=5000000;
