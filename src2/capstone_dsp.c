@@ -6,13 +6,12 @@
 #include "hardware/pwm.h"
 #include "capstone_pwm.h"
 
-
-void process_ISNS(uint16_t *sample, void *other_stuff) {
+void __not_in_flash_func(process_ISNS)(uint16_t *sample, void *other_stuff) {
     static int y_k_IS = 0;
     int PI_setpoint = ((PI_controller_t *)(other_stuff))->PI_SP;
     y_k_IS += 569*PI_setpoint - 9*(*sample);
-    if(y_k_IS>500000000) y_k_IS=500000000;
-    if(y_k_IS<-500000000) y_k_IS=-500000000;
+    if(y_k_IS>50000000) y_k_IS=50000000;
+    if(y_k_IS<-10000) y_k_IS=-10000;
     int d_IS = y_k_IS + 27314*PI_setpoint - 440*(*sample);
     int d = d_IS>>16;
 
@@ -24,7 +23,7 @@ void process_ISNS(uint16_t *sample, void *other_stuff) {
     ((PI_controller_t *)(other_stuff))->d = d;
     ((PI_controller_t *)(other_stuff))->y_k_IS = y_k_IS;
 }
-void process_TSNS(uint16_t *sample, void *other_stuff) {
+void __not_in_flash_func(process_TSNS)(uint16_t *sample, void *other_stuff) {
 }
 
 void PI_controller_init(PI_controller_t *pic,
@@ -47,7 +46,7 @@ void PI_controller_init(PI_controller_t *pic,
     pic->y_k_IS = 0;
 }
 
-void PI_controller_DSP(PI_controller_t *pic, uint16_t sample) {
+void __not_in_flash_func(PI_controller_DSP)(PI_controller_t *pic, uint16_t sample) {
 //
 //    pic->y_k_IS += pic->y_k_IS_SP_scalar * pic->PI_SP - pic->y_k_IS_ADC_scalar * sample;
 //    if(pic->y_k_IS > pic->y_k_IS_abs_bounds) pic->y_k_IS = pic->y_k_IS_abs_bounds;

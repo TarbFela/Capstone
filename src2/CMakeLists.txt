@@ -17,6 +17,7 @@ add_executable(capstone_pwm
 	main.c
 	capstone_pwm.c
 	capstone_dsp.c
+	capstone_adc.c
 )
 
 
