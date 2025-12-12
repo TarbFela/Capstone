@@ -15,6 +15,7 @@
 #include "pico/multicore.h"
 
 #include "capstone_pwm.h"
+#include "capstone_dsp.h"
 
 
 #define PMIC_I2C_SDA_PIN 8
@@ -33,16 +34,9 @@
 #define ADC_BUFFER_SIZE 2048
 #define ADC_BUFFER_SIZE_WRAP_MASK 0x7FF
 
-int PI_setpoint = 10;
+int PI_setpoint = 15;
 
-void process_ISNS(uint16_t *sample, uint32_t counter) {
-    if(!((counter+1)&0xFFFF)) printf("I %d\n",*sample);
-}
-void process_TSNS(uint16_t *sample, uint32_t counter) {
-    if(!(counter&0xFFFF)) printf("T %d\n",*sample);
-}
 
-void (*sample_processors[])(uint16_t *, uint32_t) = {process_ISNS, process_TSNS};
 
 void other_core() {
     multicore_fifo_push_blocking(0xBEEF);
@@ -80,24 +74,30 @@ void other_core() {
     adc_dma_daisy_chain_hw[0] = &dma_hw->ch[adc_dma_daisy_chain[0]];
     adc_dma_daisy_chain_hw[1] = &dma_hw->ch[adc_dma_daisy_chain[1]];
 
+    PI_controller_t current_controller;
+    PI_controller_init(&current_controller,
+                       5,
+                       569,
+                       9,
+                       27314,
+                       440,
+                       500000000,
+                       110,
+                       250
+    );
+
+    void **other_stuff_arr;
+    other_stuff_arr = (void *)malloc(sizeof(size_t)*2);
+    other_stuff_arr[0] = (void *)(&current_controller);
+    other_stuff_arr[1] = NULL;
+
     while(1) {
         while(multicore_fifo_pop_blocking()!=1); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
         adc_run(false);
 
-
-        int sample;
-        // "IS" refers to "integer scaling" where I am scaling up the values to improve precision in stored values, which are bit-shifted down to usbale duty cycle values.
-        // "IS" variables *already factor in* PI constants (ki = 0.41677, kp = 0.00041677)
-        int err_IS;
-        int y_k_IS = 0;
-        int d_IS;
-        int d;
-
-        int i = 0;
         printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
         adc_select_input(ISNS_ADC_PIN-26);
         adc_fifo_drain();
-
 
         dma_channel_config cfg = dma_channel_get_default_config(adc_dma_daisy_chain[0]);
         channel_config_set_transfer_data_size(&cfg, DMA_SIZE_16);
@@ -125,17 +125,19 @@ void other_core() {
         );
 
         dma_channel_config cfgs[2] = {cfg,cfg1};
-
-        adc_run(true);
-        dma_channel_start(adc_dma_daisy_chain[0]);
-
         // DMA transfer count is a count-DOWN; therefore we are inverting our sample processor counter correspondingly.
         uint32_t samples_processed_inv = ADC_BUFFER_SIZE;
         uint32_t dma_rr_i = 0;
         uint32_t iii = 0;
+
+        adc_run(true);
+        dma_channel_start(adc_dma_daisy_chain[0]);
         while(!multicore_fifo_rvalid()) {
             while(samples_processed_inv > adc_dma_daisy_chain_hw[dma_rr_i]->transfer_count);
-            sample_processors[samples_processed_inv&0x1](&adc_dma_buffer[ADC_BUFFER_SIZE-samples_processed_inv], iii++);
+            sample_processors[samples_processed_inv&0x1](
+                    &adc_dma_buffer[ADC_BUFFER_SIZE-samples_processed_inv],
+                    (void *)(&current_controller)
+                    );
             samples_processed_inv--;
             // when samples_processed_inv WRAPS below zero, the MSB will be high. Use this to increment which dma we're looking at.
             //dma_rr_i = (dma_rr_i + (samples_processed_inv>>31))&0x1;
@@ -144,31 +146,22 @@ void other_core() {
                 dma_rr_i = 1 - dma_rr_i;
                 samples_processed_inv = ADC_BUFFER_SIZE;
                 //printf("W\n");
-            }
-            /*
-            y_k_IS += 569*PI_setpoint - 9*sample;
-            if(y_k_IS>500000000) y_k_IS=5000000;
-            if(y_k_IS<-500000000) y_k_IS=-5000000;
-            d_IS = y_k_IS + 27314*PI_setpoint - 440*sample;
-            d = d_IS>>16;
-
-            if(!((i)%0x3FFFF)) {
-                printf("d: %04d ykIS: %08d Imeas: %0.3fA\n",d,y_k_IS,(float)sample * 20.0*3.3/4096.0);
+                iii++;
+                if(!(iii&0x3F)) {
+                    printf("D%d\ns[%d]%d\ns[%d]%d\n\n",current_controller.d,ADC_BUFFER_SIZE-2,adc_dma_buffer[ADC_BUFFER_SIZE-2],ADC_BUFFER_SIZE-1,adc_dma_buffer[ADC_BUFFER_SIZE-1]);
+                }
             }
 
-            if(d>330) d = 200;
-            if(d<110) d = 110;
-            */
-            //pwm_set_gpio_level(PWM1_GPIO_PIN,d);
-            //pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+            //
+            //
         }
-        multicore_fifo_drain();
         pwm_set_gpio_level(PWM1_GPIO_PIN,0);
         pwm_set_gpio_level(PWM2_GPIO_PIN,0);
         pwm_set_gpio_level(PWM3_GPIO_PIN,0);
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
         printf("[CL control paused, all outputs to 0]\n");
         adc_run(false);
+        multicore_fifo_drain();
     }
 
 }

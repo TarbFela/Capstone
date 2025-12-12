@@ -16,6 +16,7 @@ pico_sdk_init()
 add_executable(capstone_pwm
 	main.c
 	capstone_pwm.c
+	capstone_dsp.c
 )
 
 
