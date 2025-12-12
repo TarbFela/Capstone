@@ -67,8 +67,6 @@ void other_core() {
         uint32_t dma_rr_i = 0;
         uint32_t iii = 0;
 
-
-
         pwm_set_gpio_level(PWM1_GPIO_PIN,100);
         pwm_set_gpio_level(PWM2_GPIO_PIN,100);
         pwm_set_gpio_level(PWM3_GPIO_PIN,100);
@@ -82,10 +80,9 @@ void other_core() {
                     (void *)(&current_controller)
                     );
             samples_processed_inv--;
-            // when samples_processed_inv WRAPS below zero, the MSB will be high. Use this to increment which dma we're looking at.
-            //dma_rr_i = (dma_rr_i + (samples_processed_inv>>31))&0x1;
+
             if(samples_processed_inv>ADC_BUFFER_SIZE) {
-                cas->adc_dma_daisy_chain_hw[dma_rr_i]->write_addr = (uintptr_t) (cas->adc_dma_buffer);
+                (cas->adc_dma_daisy_chain_hw[dma_rr_i])->write_addr = (uintptr_t) (cas->adc_dma_buffer);
                 dma_rr_i = 1 - dma_rr_i;
                 samples_processed_inv = ADC_BUFFER_SIZE;
 
@@ -107,7 +104,7 @@ void other_core() {
         pwm_set_gpio_level(PWM3_GPIO_PIN,0);
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
         printf("[CL control paused, all outputs to 0]\n");
-        adc_run(false);
+        capstone_adc_stop(cas);
         multicore_fifo_drain();
     }
 

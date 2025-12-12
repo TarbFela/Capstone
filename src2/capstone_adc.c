@@ -80,3 +80,10 @@ void capstone_adc_start(capstone_adc_struct_t *cas) {
     adc_run(true);
     dma_channel_start(cas->adc_dma_daisy_chain[0]);
 }
+
+void capstone_adc_stop(capstone_adc_struct_t *cas) {
+    adc_run(false);
+    adc_fifo_drain();
+    dma_channel_abort(cas->adc_dma_daisy_chain[0]);
+    dma_channel_abort(cas->adc_dma_daisy_chain[1]);
+}

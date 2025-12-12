@@ -27,5 +27,6 @@ typedef struct {
 capstone_adc_struct_t *capstone_adc_init();
 
 void capstone_adc_start(capstone_adc_struct_t *cas);
+void capstone_adc_stop(capstone_adc_struct_t *cas);
 
 #endif //CAPSTONE_PWM_CAPSTONE_ADC_H
