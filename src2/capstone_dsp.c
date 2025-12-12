@@ -8,15 +8,14 @@
 
 
 void process_ISNS(uint16_t *sample, void *other_stuff) {
-    //if(!((counter+1)&0x3FFF)) printf("I %d\n",*sample);
-}
-void process_TSNS(uint16_t *sample, void *other_stuff) {
     PI_controller_t *pic = (PI_controller_t *)(other_stuff);
     PI_controller_DSP(pic, *sample);
     int d = pic->d;
     if(d>250 || d<100) return;
     pwm_set_gpio_level(PWM1_GPIO_PIN,d);
     pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+}
+void process_TSNS(uint16_t *sample, void *other_stuff) {
 }
 
 void PI_controller_init(PI_controller_t *pic,
