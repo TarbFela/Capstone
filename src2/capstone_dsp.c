@@ -59,11 +59,11 @@ void __not_in_flash_func(PI_controller_DSP)(PI_controller_t *pic, uint16_t sampl
 
 //    pic->d = d;
     pic->y_k_IS += 569*pic->PI_SP - 9*sample;
-    if(pic->y_k_IS>500000000) pic->y_k_IS=500000000;
-    if(pic->y_k_IS<-500000000) pic->y_k_IS=-500000000;
+    if(pic->y_k_IS>50000000) pic->y_k_IS=50000000;
+    if(pic->y_k_IS<-50000000) pic->y_k_IS=-50000000;
     pic->d_IS = pic->y_k_IS + 27314*pic->PI_SP - 440*sample;
     pic->d = pic->d_IS>>16;
-    if(pic->d>330) pic->d = 200;
+    if(pic->d>400) pic->d = 400;
     if(pic->d<110) pic->d = 110;
     /*
             y_k_IS += 569*PI_setpoint - 9*sample;
