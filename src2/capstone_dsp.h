@@ -25,6 +25,10 @@ typedef struct {
     int d_bound_upper;
 } PI_controller_t;
 
+typedef struct {
+    uint16_t **adc_dma_buffs;
+} Global_DMA_IRQ_Info_t;
+
 void process_ISNS(uint16_t *sample, void *other_stuff);
 void process_TSNS(uint16_t *sample, void *other_stuff);
 

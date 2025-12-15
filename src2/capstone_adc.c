@@ -8,8 +8,7 @@ capstone_adc_struct_t *capstone_adc_init() {
     adc_run(false);
     adc_gpio_init(ISNS_ADC_PIN);
     adc_gpio_init(TSNS_ADC_PIN);
-    adc_select_input(ISNS_ADC_PIN
-                     -26);
+    adc_select_input(ISNS_ADC_PIN-26);
     adc_fifo_setup(
             true,    // Write each completed conversion to the sample FIFO
             true,    // Enable DMA data request (DREQ)
@@ -44,6 +43,7 @@ capstone_adc_struct_t *capstone_adc_init() {
     channel_config_set_dreq(&cfg0, DREQ_ADC);
     channel_config_set_chain_to(&cfg0, adc_dma_daisy_chain[1]);
 
+
     dma_channel_config cfg1 = dma_channel_get_default_config(adc_dma_daisy_chain[1]);
     channel_config_set_transfer_data_size(&cfg1, DMA_SIZE_16);
     channel_config_set_read_increment(&cfg1, false);
@@ -64,19 +64,27 @@ capstone_adc_struct_t *capstone_adc_init() {
 }
 
 void capstone_adc_start(capstone_adc_struct_t *cas) {
+    // each DMA should write to half of the buffer.
     dma_channel_configure(cas->adc_dma_daisy_chain[0], &(cas->dma_cfg[0]),
                           cas->adc_dma_buffer,    // dst
                           &adc_hw->fifo,  // src
-                          ADC_BUFFER_SIZE,  // transfer count
+                          ADC_BUFFER_SIZE/2,  // transfer count
                           false            // DON'T start immediately
     );
     dma_channel_configure(cas->adc_dma_daisy_chain[1], &(cas->dma_cfg[1]),
-                          cas->adc_dma_buffer,    // dst
+                          &(cas->adc_dma_buffer[ADC_BUFFER_SIZE/2]),    // dst
                           &adc_hw->fifo,  // src
-                          ADC_BUFFER_SIZE,  // transfer count
+                          ADC_BUFFER_SIZE/2,  // transfer count
                           false            // DON'T start immediately
     );
 
+
+    dma_channel_set_irq0_enabled(cas->adc_dma_daisy_chain[0], true);
+    dma_channel_set_irq0_enabled(cas->adc_dma_daisy_chain[1], true);
+
+    irq_set_enabled(DMA_IRQ_0, true);
+
+    adc_select_input(ISNS_ADC_PIN-26);
     adc_run(true);
     dma_channel_start(cas->adc_dma_daisy_chain[0]);
 }

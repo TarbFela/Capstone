@@ -11,6 +11,7 @@
 #include "hardware/spi.h"
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
+#include "hardware/irq.h"
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 
@@ -30,12 +31,51 @@
 int PI_setpoint = 10;
 PI_controller_t current_controller;
 
+volatile capstone_adc_struct_t *cas;
+
+
+
+void isns_dma_handler() {
+    static int d = 100;
+    //debugging toggle
+    sio_hw->gpio_togl = 0x1<<18;
+    // if the second [1] of the DMAs has triggered an interrupt, we can probably assume (DANGEROUS) that we should look halfway through the buffer.
+    int data_offset = (ADC_BUFFER_SIZE / 2) * (int) dma_channel_get_irq0_status(cas->adc_dma_daisy_chain[1]);
+    // this shouldn't produce a branch... I think?
+    int culprit_dma_daisy_chain_index = (data_offset != 0);
+    uint16_t *data = &(cas->adc_dma_buffer[data_offset]);
+    // a little stupid, but set the write address to where we starting getting data from.
+    // TODO: configure the DMAs as wrapping rings so that they don't need to be reset. or use a third, cleanup DMA
+    (cas->adc_dma_daisy_chain_hw[culprit_dma_daisy_chain_index])->write_addr = (uintptr_t)(data);
+
+    // ultra-shitty DSP
+    int avg = 0;
+    for(int i = 0; i<ADC_BUFFER_SIZE/2; i++) avg+= data[i];
+    // TODO: the current buffer size is 256 with a half-size of 128, 2^7 is 128, so divide by 2^7 to get the average
+    avg>>=7;
+
+    // 62 = 4096 * 0.05 / 3.3
+    int targ = current_controller.PI_SP * 62;
+    d += -(avg > targ) + (avg < targ)
+        -(avg+20 > targ) + (avg-20 < targ)
+        -(avg+40 > targ) + (avg-40 < targ);
+
+    if(d>330) d= 330;
+    if(d<110) d= 110;
+    pwm_set_gpio_level(PWM1_GPIO_PIN,d);
+    pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+    // clear the correct interrupt
+    dma_hw->ints0 = 0x1 << cas->adc_dma_daisy_chain[culprit_dma_daisy_chain_index];
+    // debugging toggler
+    sio_hw->gpio_togl = 0x1<<18;
+}
 
 void other_core() {
     multicore_fifo_push_blocking(0xBEEF);
     printf("MULTICORE EXPLOSION!!!\n");
 
-    capstone_adc_struct_t *cas = capstone_adc_init();
+    cas = capstone_adc_init();
+    irq_set_exclusive_handler(DMA_IRQ_0, isns_dma_handler);
 
     PI_controller_init(&current_controller,
                        PI_setpoint,
@@ -53,14 +93,14 @@ void other_core() {
     other_stuff_arr[0] = (void *)(&current_controller);
     other_stuff_arr[1] = NULL;
 
+    gpio_init(18);
+    gpio_set_dir(18,GPIO_OUT);
+    gpio_pull_up(18);
+    gpio_set_slew_rate(18,GPIO_SLEW_RATE_FAST);
     while(1) {
-        while(multicore_fifo_pop_blocking()!=1); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
-
+        while(multicore_fifo_pop_blocking()!=0xBEEF); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
 
         printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
-        adc_run(false);
-        adc_fifo_drain();
-        adc_select_input(ISNS_ADC_PIN-26);
 
         // DMA transfer count is a count-DOWN; therefore we are inverting our sample processor counter correspondingly.
         uint32_t samples_processed_inv = ADC_BUFFER_SIZE;
@@ -73,39 +113,21 @@ void other_core() {
         pwm_set_gpio_level(PWM4_GPIO_PIN,100);
 
         capstone_adc_start(cas);
-        while(!multicore_fifo_rvalid()) {
-            while(samples_processed_inv > cas->adc_dma_daisy_chain_hw[dma_rr_i]->transfer_count);
-            sample_processors[samples_processed_inv&0x1](
-                    &(cas->adc_dma_buffer[ADC_BUFFER_SIZE-samples_processed_inv]),
-                    (void *)(&current_controller)
-                    );
-            samples_processed_inv--;
 
-            if(samples_processed_inv>ADC_BUFFER_SIZE) {
-                (cas->adc_dma_daisy_chain_hw[dma_rr_i])->write_addr = (uintptr_t) (cas->adc_dma_buffer);
-                dma_rr_i = 1 - dma_rr_i;
-                samples_processed_inv = ADC_BUFFER_SIZE;
-
-                current_controller.PI_SP = PI_setpoint;
-                //printf("W\n");
-                iii++;
-                if(!(iii&0x3)) {
-                    printf("D%d\n",current_controller.d);
-                    printf("Y%d\n",current_controller.y_k_IS);
-                }
-                //current_controller.PI_SP = PI_setpoint;
-            }
-
-            //
-            //
+        while(1) {
+            int sig = multicore_fifo_pop_blocking();
+            if (sig == 0xBEEF) break;
+            current_controller.PI_SP = sig;
         }
+
+        printf("[CL control paused, all outputs to 0]\n");
+        capstone_adc_stop(cas);
+        multicore_fifo_drain();
+
         pwm_set_gpio_level(PWM1_GPIO_PIN,0);
         pwm_set_gpio_level(PWM2_GPIO_PIN,0);
         pwm_set_gpio_level(PWM3_GPIO_PIN,0);
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-        printf("[CL control paused, all outputs to 0]\n");
-        capstone_adc_stop(cas);
-        multicore_fifo_drain();
     }
 
 }
@@ -145,11 +167,13 @@ int main(void) {
         if(ui >= '0' && ui <= '9') {
             PI_setpoint = ((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
             printf("PI setpoint: %dA\n",PI_setpoint);
+            if(latch) multicore_fifo_push_blocking(PI_setpoint);
         }
         if(ui == 'p' || ui == 'l') {
             if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/4;
             if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/4;
             printf("PI setpoint: %dA\n",PI_setpoint);
+            if(latch) multicore_fifo_push_blocking(PI_setpoint);
         }
         if(ui == 'i') {
             printf("Writing to INA236...\n");
@@ -194,10 +218,8 @@ int main(void) {
             free(INA236_read_dst);
         }
         if(ui == ' ') {
-            multicore_fifo_push_blocking(1);
-        }
-        if(ui == 'r') {
-            multicore_fifo_push_blocking(0);
+            latch = !latch;
+            multicore_fifo_push_blocking(0xBEEF);
         }
     }
 

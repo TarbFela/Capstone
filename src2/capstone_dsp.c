@@ -5,23 +5,30 @@
 #include "capstone_dsp.h"
 #include "hardware/pwm.h"
 #include "capstone_pwm.h"
+#include "hardware/gpio.h"
 
 void __not_in_flash_func(process_ISNS)(uint16_t *sample, void *other_stuff) {
-    static int y_k_IS = 0;
-    int PI_setpoint = ((PI_controller_t *)(other_stuff))->PI_SP;
-    y_k_IS += 569*PI_setpoint - 9*(*sample);
-    if(y_k_IS>50000000) y_k_IS=50000000;
-    if(y_k_IS<-10000) y_k_IS=-10000;
-    int d_IS = y_k_IS + 27314*PI_setpoint - 440*(*sample);
-    int d = d_IS>>16;
+//    static int y_k_IS = 0;
+//    int PI_setpoint = ((PI_controller_t *)(other_stuff))->PI_SP;
+//    PI_setpoint *= 62;
+//    int err_IS = PI_setpoint - (*sample);
+//    y_k_IS += err_IS * 11;
+//    if(y_k_IS < -1000000000) y_k_IS = -1000000000;
+//    if(y_k_IS > 1000000000) y_k_IS = 1000000000;
+//
+//    int d = ((8*y_k_IS)>>19) + (err_IS>>7);
+//
+//    if(d>320) d = 320;
+//    if(d<110) d = 110;
+//
+//    pwm_set_gpio_level(PWM1_GPIO_PIN,d);
+//    pwm_set_gpio_level(PWM3_GPIO_PIN,d);
 
-    if(d>320) d = 320;
-    if(d<110) d = 110;
 
-    pwm_set_gpio_level(PWM1_GPIO_PIN,d);
-    pwm_set_gpio_level(PWM3_GPIO_PIN,d);
-    ((PI_controller_t *)(other_stuff))->d = d;
-    ((PI_controller_t *)(other_stuff))->y_k_IS = y_k_IS;
+
+
+//    ((PI_controller_t *)(other_stuff))->d = d;
+//    ((PI_controller_t *)(other_stuff))->y_k_IS = y_k_IS;
 }
 void __not_in_flash_func(process_TSNS)(uint16_t *sample, void *other_stuff) {
 }

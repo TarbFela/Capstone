@@ -14,8 +14,10 @@
 #define ISNS_ADC_PIN 28
 #define TSNS_ADC_PIN 27
 
-#define ADC_BUFFER_SIZE 2048
-#define ADC_BUFFER_SIZE_WRAP_MASK 0x7FF
+#define ADC_BUFFER_SIZE 256
+#define ADC_BUFFER_SIZE_WRAP_MASK 0xFF
+
+
 
 typedef struct {
     uint adc_dma_daisy_chain[2];
