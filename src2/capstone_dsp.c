@@ -51,6 +51,7 @@ void PI_controller_init(PI_controller_t *pic,
     pic->d_bound_lower = d_bound_lower;
     pic->d_bound_upper = d_bound_upper;
     pic->y_k_IS = 0;
+    pic->controller_paused = 0;
 }
 
 void __not_in_flash_func(PI_controller_DSP)(PI_controller_t *pic, uint16_t sample) {

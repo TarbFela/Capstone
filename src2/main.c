@@ -12,6 +12,7 @@
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
 #include "hardware/irq.h"
+#include "hardware/timer.h"
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 
@@ -28,11 +29,11 @@
 // 48 MHz
 #define ADC_BASE_CLOCK_HZ 48000000
 
-int PI_setpoint = 10;
-PI_controller_t current_controller;
+
+volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
-
+volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
 
 
 void isns_dma_handler() {
@@ -48,26 +49,151 @@ void isns_dma_handler() {
     // TODO: configure the DMAs as wrapping rings so that they don't need to be reset. or use a third, cleanup DMA
     (cas->adc_dma_daisy_chain_hw[culprit_dma_daisy_chain_index])->write_addr = (uintptr_t)(data);
 
-    // ultra-shitty DSP
-    int avg = 0;
-    for(int i = 0; i<ADC_BUFFER_SIZE/2; i++) avg+= data[i];
-    // TODO: the current buffer size is 256 with a half-size of 128, 2^7 is 128, so divide by 2^7 to get the average
-    avg>>=7;
+    // ultra-shitty DSP:
+    int isns_avg = 0;
+    for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) isns_avg+= data[2*i];
 
-    // 62 = 4096 * 0.05 / 3.3
-    int targ = current_controller.PI_SP * 62;
-    d += -(avg > targ) + (avg < targ)
-        -(avg+20 > targ) + (avg-20 < targ)
-        -(avg+40 > targ) + (avg-40 < targ);
+    int tsns_avg = 0;
+    for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) tsns_avg += data[2*i + 1];
+    
+    // TODO: the current buffer size is 256 with a quarter-size (half per DMA, half per ADC ch) of 64. Divide by 2^6.
+    tsns_avg>>=6; // bring TSNS to 14-bit average as opposed to 12-bit
+    TSNS_ADC_value_12_bit_avg = tsns_avg;
+    isns_avg>>=6;
+    ISNS_ADC_value_12_bit_avg = isns_avg;
 
-    if(d>330) d= 330;
-    if(d<110) d= 110;
-    pwm_set_gpio_level(PWM1_GPIO_PIN,d);
-    pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+
+    // psuedo-integral control. Increment faster for bigger errors.
+    // Don't change the duty cycle if the controller is paused.
+    if(!current_controller.controller_paused) {
+        // 62 = 4096 * 0.05 / 3.3
+        int targ = current_controller.PI_SP * 62;
+        d += (-(isns_avg > targ) + (isns_avg < targ)
+              - 2 * (isns_avg + 16 > targ) + 2 * (isns_avg - 16 < targ)
+              - 2 * (isns_avg + 32 > targ) + 2 * (isns_avg - 32 < targ));
+        if(d>330) d= 330;
+        if(d<110) d= 110;
+        pwm_set_gpio_level(PWM1_GPIO_PIN,d);
+        pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+    }
+
+
     // clear the correct interrupt
     dma_hw->ints0 = 0x1 << cas->adc_dma_daisy_chain[culprit_dma_daisy_chain_index];
     // debugging toggler
     sio_hw->gpio_togl = 0x1<<18;
+}
+
+
+void vtc_offset_sweep() {
+    printf("[RUNNING VTC OFFSET SWEEP]\n");
+    printf("Starting ADC and DMAs...\n");
+
+    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+
+    current_controller.controller_paused = 1;
+    capstone_adc_start(cas);
+
+
+
+    sleep_ms(1000);
+    uint64_t time_us;
+    uint16_t i_measurements[256];
+    uint16_t t_measurements[256];
+    uint16_t i_setpoints[16];
+    int mmi = 0;
+    int ispi = 0;
+
+    // sweep currents
+    for(int i = 6; i<25; i+=3) {
+        current_controller.PI_SP = i;
+        sleep_ms(500);
+        i_setpoints[ispi++] = i;
+        printf("SWEEP LEVEL %d...\n",i);
+        // for each current setpoint, take three pairs of measurements
+        // first, an initial measurement set:
+        //      output-off measurement
+        //      output-on measurement (post-settling)
+        //      output-on measurement (after brief heating)
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+
+        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
+        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+
+        current_controller.controller_paused = 0;
+        sleep_ms(400);
+        current_controller.controller_paused = 1;
+        sleep_ms(100);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        current_controller.controller_paused = 0;
+        sleep_ms(400);
+        current_controller.controller_paused = 1;
+        sleep_ms(100);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+
+        // second, a middle-ground measurement set:
+        //      regular-interval measurements
+        current_controller.controller_paused = 0;
+
+        for(int ii = 0; ii<10; ii++) {
+            printf("\tMID SWEEP %d...\n",ii);
+            sleep_ms(500);
+            current_controller.controller_paused = 1;
+            sleep_ms(500);
+            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        }
+        // third, a final ("warm") measurement set:
+        //      two well-spaced output-on measurements
+        //      two well-spaced output-off measurements
+        sleep_ms(1000);
+        current_controller.controller_paused = 1;
+        sleep_ms(100);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        current_controller.controller_paused = 0;
+        sleep_ms(300);
+        current_controller.controller_paused = 1;
+        sleep_ms(100);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+
+        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+
+        sleep_ms(400);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        sleep_ms(400);
+        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+
+        printf("Cooling down...\n");
+        sleep_ms(500);
+    }
+
+    capstone_adc_stop(cas);
+
+    int mmi_ispi_ratio = (mmi+1)/(ispi+1);
+    mmi--;
+    while(ispi--) {
+        printf("%d,\n",i_setpoints[ispi]);
+        for(int ii = 0; ii<17; ii++) {
+            printf("\t ,%d, %d\n",i_measurements[mmi],t_measurements[mmi--]);
+        }
+    }
+
+
 }
 
 void other_core() {
@@ -78,7 +204,7 @@ void other_core() {
     irq_set_exclusive_handler(DMA_IRQ_0, isns_dma_handler);
 
     PI_controller_init(&current_controller,
-                       PI_setpoint,
+                       10,
                        569,
                        9,
                        27314,
@@ -88,25 +214,18 @@ void other_core() {
                        250
     );
 
-    void **other_stuff_arr;
-    other_stuff_arr = (void *)malloc(sizeof(size_t)*2);
-    other_stuff_arr[0] = (void *)(&current_controller);
-    other_stuff_arr[1] = NULL;
-
     gpio_init(18);
     gpio_set_dir(18,GPIO_OUT);
     gpio_pull_up(18);
     gpio_set_slew_rate(18,GPIO_SLEW_RATE_FAST);
+
+    vtc_offset_sweep();
+    sleep_ms(100);
+
     while(1) {
         while(multicore_fifo_pop_blocking()!=0xBEEF); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
 
         printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
-
-        // DMA transfer count is a count-DOWN; therefore we are inverting our sample processor counter correspondingly.
-        uint32_t samples_processed_inv = ADC_BUFFER_SIZE;
-        uint32_t dma_rr_i = 0;
-        uint32_t iii = 0;
-
         pwm_set_gpio_level(PWM1_GPIO_PIN,100);
         pwm_set_gpio_level(PWM2_GPIO_PIN,100);
         pwm_set_gpio_level(PWM3_GPIO_PIN,100);
@@ -115,9 +234,9 @@ void other_core() {
         capstone_adc_start(cas);
 
         while(1) {
-            int sig = multicore_fifo_pop_blocking();
+            uint32_t sig = multicore_fifo_pop_blocking();
             if (sig == 0xBEEF) break;
-            current_controller.PI_SP = sig;
+            //current_controller.PI_SP = sig;
         }
 
         printf("[CL control paused, all outputs to 0]\n");
@@ -156,6 +275,7 @@ int main(void) {
     int pi_en_latch = 0;
     int D1_thresh = 10;
     int D1_thresh_setting_multiplier = 2;
+    int PI_setpoint = 10;
     while(1) {
         scanf("%c",&ui);
         if(ui=='q') break;

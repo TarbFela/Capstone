@@ -35,6 +35,7 @@ target_link_libraries(capstone_pwm
 		hardware_i2c
 		hardware_pwm
 		hardware_gpio
+		hardware_timer
 		pico_bootrom
 		pico_multicore
 )

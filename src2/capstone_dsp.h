@@ -23,6 +23,7 @@ typedef struct {
     int y_k_IS_abs_bounds;
     int d_bound_lower;
     int d_bound_upper;
+    int controller_paused;
 } PI_controller_t;
 
 typedef struct {
