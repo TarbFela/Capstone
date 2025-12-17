@@ -13,9 +13,17 @@
 #define PWM3_GPIO_PIN 2
 #define PWM4_GPIO_PIN 3
 
+#define capstone_pwm_set_hi_level(d) pwm_set_gpio_level(PWM1_GPIO_PIN,d);pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+#define capstone_pwm_set_lo_level(d) pwm_set_gpio_level(PWM2_GPIO_PIN,d);pwm_set_gpio_level(PWM4_GPIO_PIN,d);
+
 
 
 void capstone_pwm_init();
+
+void capstone_pwm_start();
+void capstone_pwm_stop();
+
+
 
 
 #endif //CAPSTONE_PWM_H

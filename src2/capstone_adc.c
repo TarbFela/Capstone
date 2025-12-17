@@ -3,9 +3,11 @@
 //
 #include "capstone_adc.h"
 
-capstone_adc_struct_t *capstone_adc_init() {
+void capstone_adc_init(capstone_adc_struct_t *cas, void (handler_function)(void)) {
+    static bool first = true;
     adc_init();
     adc_run(false);
+    adc_fifo_drain();
     adc_gpio_init(ISNS_ADC_PIN);
     adc_gpio_init(TSNS_ADC_PIN);
     adc_select_input(ISNS_ADC_PIN-26);
@@ -29,8 +31,6 @@ capstone_adc_struct_t *capstone_adc_init() {
     adc_dma_daisy_chain[0] = dma_claim_unused_channel(true);
     adc_dma_daisy_chain[1] = dma_claim_unused_channel(true);
     uint16_t *adc_dma_buffer;
-    //TODO: check for malloc failure.
-    adc_dma_buffer = (uint16_t *)malloc(sizeof(uint16_t) * ADC_BUFFER_SIZE);
 
     dma_channel_hw_t *adc_dma_daisy_chain_hw[2];
     adc_dma_daisy_chain_hw[0] = &dma_hw->ch[adc_dma_daisy_chain[0]];
@@ -51,16 +51,21 @@ capstone_adc_struct_t *capstone_adc_init() {
     channel_config_set_dreq(&cfg1, DREQ_ADC);
     channel_config_set_chain_to(&cfg1, adc_dma_daisy_chain[0]);
 
-    capstone_adc_struct_t *cas;
-    cas = (capstone_adc_struct_t *)malloc(sizeof(capstone_adc_struct_t));
-    cas->adc_dma_buffer = adc_dma_buffer;
     cas->adc_dma_daisy_chain[0] = adc_dma_daisy_chain[0];
     cas->adc_dma_daisy_chain[1] = adc_dma_daisy_chain[1];
     cas->adc_dma_daisy_chain_hw[0] = adc_dma_daisy_chain_hw[0];
     cas->adc_dma_daisy_chain_hw[1] = adc_dma_daisy_chain_hw[1];
     cas->dma_cfg[0] = cfg0;
     cas->dma_cfg[1] = cfg1;
-    return cas;
+
+    irq_set_exclusive_handler(DMA_IRQ_0, handler_function);
+
+    //TODO: check for malloc failure.
+    if(first) {
+        adc_dma_buffer = (uint16_t *)malloc(sizeof(uint16_t) * ADC_BUFFER_SIZE);
+        cas->adc_dma_buffer = adc_dma_buffer;
+        first = false;
+    }
 }
 
 void capstone_adc_start(capstone_adc_struct_t *cas) {

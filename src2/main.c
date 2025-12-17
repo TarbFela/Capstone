@@ -25,6 +25,7 @@
 #define PMIC_I2C_SCL_PIN 9
 #define PMIC_I2C i2c0
 
+#define NA_ADC_PIN 26
 
 // 48 MHz
 #define ADC_BASE_CLOCK_HZ 48000000
@@ -196,12 +197,73 @@ void vtc_offset_sweep() {
 
 }
 
+void network_analyzer_slave_adc_handler(void) {
+    //static uint8_t i = 0;
+    uint8_t val = adc_fifo_get() + 100;
+    // since the ADC is shifting down to 8 bits, we have a 256 FSR
+    // that gives us a nice, 100–356 range. That works well!
+    pwm_set_gpio_level(PWM1_GPIO_PIN,val);
+    pwm_set_gpio_level(PWM3_GPIO_PIN, val);
+    adc_fifo_drain();
+}
+
+// override the CAS with our own ADC to PWM handler.
+void network_analyzer_slave_start() {
+    printf("Initializing Network Analyzer Mode...\n");
+    adc_init();
+    adc_run(false);
+    adc_gpio_init(NA_ADC_PIN);
+    adc_select_input(NA_ADC_PIN-26);
+    adc_fifo_setup(
+            true,    // Write each completed conversion to the sample FIFO
+            false,    // Enable DMA data request
+            1,       // DREQ (and IRQ) asserted when at least 1 sample present
+            false,   // We won't see the ERR bit because of 8 bit reads; disable.
+            true     // Shift each sample to 8 bits when pushing to FIFO?
+    );
+    adc_irq_set_enabled(true);
+
+    irq_set_exclusive_handler(ADC_IRQ_FIFO,network_analyzer_slave_adc_handler);
+    irq_set_enabled(ADC_IRQ_FIFO, true);
+
+    // no round-robin
+    adc_set_round_robin(0);
+    // our PWM is 125kHz, so our ADC should be 125kHz? sure. 48MHz / 125kHz = 384
+    adc_set_clkdiv(192);
+    printf("Starting PWM Outputs...\n");
+
+    pwm_set_gpio_level(PWM1_GPIO_PIN,100);
+    pwm_set_gpio_level(PWM2_GPIO_PIN,100);
+    pwm_set_gpio_level(PWM3_GPIO_PIN,100);
+    pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+
+    sleep_ms(1000);
+
+    adc_run(true);
+    printf("ADC Started.\n");
+}
+
+// stops the network analyzer program and re-inits the CAS.
+void network_analyzer_slave_stop() {
+    printf("Stopping NA mode...\n");
+    adc_run(false);
+    adc_fifo_drain();
+    irq_set_enabled(ADC_IRQ_FIFO,false);
+    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+    capstone_adc_init(cas, isns_dma_handler);
+    printf("NA mode exited.\n");
+}
+
 void other_core() {
     multicore_fifo_push_blocking(0xBEEF);
     printf("MULTICORE EXPLOSION!!!\n");
 
-    cas = capstone_adc_init();
-    irq_set_exclusive_handler(DMA_IRQ_0, isns_dma_handler);
+    cas = (capstone_adc_struct_t *)malloc(sizeof(capstone_adc_struct_t));
+    capstone_adc_init(cas, isns_dma_handler);
+
 
     PI_controller_init(&current_controller,
                        10,
@@ -219,34 +281,48 @@ void other_core() {
     gpio_pull_up(18);
     gpio_set_slew_rate(18,GPIO_SLEW_RATE_FAST);
 
-    vtc_offset_sweep();
+
     sleep_ms(100);
-
+    int ui = 0;
     while(1) {
-        while(multicore_fifo_pop_blocking()!=0xBEEF); // wait for an input of 1, i.e. CL toggle. input of 0 is just a request for status printing.
+        ui = multicore_fifo_pop_blocking();
+        if(ui == 0xBEEF) {
 
-        printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
-        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+            printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
+            pwm_set_gpio_level(PWM1_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM2_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM3_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM4_GPIO_PIN, 100);
 
-        capstone_adc_start(cas);
+            capstone_adc_start(cas);
 
-        while(1) {
-            uint32_t sig = multicore_fifo_pop_blocking();
-            if (sig == 0xBEEF) break;
-            //current_controller.PI_SP = sig;
+            while (1) {
+                uint32_t sig = multicore_fifo_pop_blocking();
+                if (sig == 0xBEEF) break;
+                //current_controller.PI_SP = sig;
+            }
+
+            printf("[CL control paused, all outputs to 0]\n");
+            capstone_adc_stop(cas);
+            multicore_fifo_drain();
+
+            pwm_set_gpio_level(PWM1_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
         }
-
-        printf("[CL control paused, all outputs to 0]\n");
-        capstone_adc_stop(cas);
-        multicore_fifo_drain();
-
-        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+        else if(ui == 0xABCD) {
+            network_analyzer_slave_start();
+            while (1) {
+                uint32_t sig = multicore_fifo_pop_blocking();
+                if (sig == 0xABCD) break;
+                //current_controller.PI_SP = sig;
+            }
+            network_analyzer_slave_stop();
+        }
+        else if(ui == 0xDEAD) {
+            vtc_offset_sweep();
+        }
     }
 
 }
@@ -340,6 +416,12 @@ int main(void) {
         if(ui == ' ') {
             latch = !latch;
             multicore_fifo_push_blocking(0xBEEF);
+        }
+        if(ui == 'g') {
+            multicore_fifo_push_blocking(0xABCD);
+        }
+        if(ui == 'c') {
+            multicore_fifo_push_blocking(0xDEAD);
         }
     }
 
