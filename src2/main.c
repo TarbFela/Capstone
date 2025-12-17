@@ -67,8 +67,9 @@ void datalogger_irq() {
     n = (n+1)&0xFF;
 
     if(!(n&0x7F) && !first) {
-        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x7) << 8;
-        W25_Clear_Sector_Blocking(addr);
+        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x3F) << 8;
+        // TODO: clear page, not sector.
+        if(!(datalogging_fs.n_pages_written&0xF)) W25_Clear_Sector_Blocking(addr);
         W25_Program_Page_Blocking(addr, (uint8_t *)(&datalogging_buff[128-n]), 256);
     }
 
@@ -449,9 +450,9 @@ int main(void) {
                 continue;
             }
             else {
-                printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x7);
+                printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x3F);
             }
-            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x7)<<8;
+            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x3F)<<8;
 
             W25_Read_Data(addr, rx_buff, 256);
 

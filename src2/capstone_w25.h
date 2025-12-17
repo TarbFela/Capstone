@@ -58,6 +58,8 @@ void W25_Clear_Sector_No_Blocking(uint32_t address);
 // clear a sector and wait for it to be done clearing it
 void W25_Clear_Sector_Blocking(uint32_t address);
 
+void W25_Clear_Page_Blocking(uint32_t address);
+
 // Write N bytes to address (N < 256)
 // note that exceeding the page-alignment (256bytes) will cause a wraparound.
 // note also that you must wait for the write to finish before using the W25 again
