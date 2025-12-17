@@ -19,6 +19,7 @@
 #include "capstone_pwm.h"
 #include "capstone_dsp.h"
 #include "capstone_adc.h"
+#include "capstone_thermocouple.h"
 
 
 #define PMIC_I2C_SDA_PIN 8
@@ -37,6 +38,8 @@ volatile PI_controller_t current_controller;
 volatile capstone_adc_struct_t *cas;
 volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
 volatile uint16_t d_glob = 0;
+volatile uint16_t T_glob = 0;
+volatile uint32_t VTCMV_glob;
 
 int32_t INA236_read_bus_voltage() {
     //printf("Reading INA236 Bus Voltage...\n");
@@ -77,6 +80,26 @@ void isns_dma_handler() {
     TSNS_ADC_value_12_bit_avg = tsns_avg;
     isns_avg>>=6;
     ISNS_ADC_value_12_bit_avg = isns_avg;
+
+    // BEST FIT LINE FROM XY PLOT
+    // Vin =  -214.2785663 * Vdiff + 2.908868568
+    // ADC to Vtc_mv_4092:
+    // Vtc,mv,4092 = -ADCval * 3300/214.28 + 2908.9 * 4092 / 204
+    // 15.4005 and 58,348.5
+    // 15.4005 = 1,971.264 / 128 ... 1971 / 128 = 15.3984375
+
+
+    uint32_t vtc_mv_4092 = 58349 - ((tsns_avg * 1971)>>7);
+    VTCMV_glob = vtc_mv_4092;
+    uint16_t T = 0;
+    for(T = 0; T < ktype_voltages_len; T++) {
+        if(ktype_voltages_20C_x4092[T] <= vtc_mv_4092) {
+            T_glob = T+20;
+            break;
+        }
+    }
+
+
 
 
     // psuedo-integral control. Increment faster for bigger errors.
@@ -133,7 +156,7 @@ void vtc_offset_sweep() {
     int ispi = 0;
 
     // sweep currents
-    for(int i = 60; i<=74; i+=3) {
+    for(int i = 63; i<=75; i+=3) {
         printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
         current_controller.PI_SP = i;
         i_setpoints[ispi++] = i;
@@ -151,7 +174,7 @@ void vtc_offset_sweep() {
         pwm_set_gpio_level(PWM4_GPIO_PIN,100);
 
         for(int ii = 0; ii<15; ii++) {
-            current_controller.controller_paused = 0; sleep_ms(400);
+            current_controller.controller_paused = 0; sleep_ms(900);
             current_controller.controller_paused = 1; sleep_ms(100);
 
             t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
@@ -169,7 +192,7 @@ void vtc_offset_sweep() {
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
 
         for(int ii = 0; ii<5; ii++) {
-            sleep_ms(500);
+            sleep_ms(1000);
 
             t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
             v_meas = INA236_read_bus_voltage();
@@ -438,6 +461,9 @@ int main(void) {
         }
         if(ui == 'c') {
             multicore_fifo_push_blocking(0xDEAD);
+        }
+        if(ui == 't') {
+            printf("Temp: %d\tADC: %d\tVtc_mv: %d\n",T_glob, TSNS_ADC_value_12_bit_avg, VTCMV_glob);
         }
     }
 
