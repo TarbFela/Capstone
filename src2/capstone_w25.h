@@ -40,6 +40,7 @@
 #define W25_STATUS_1_BUSY   0x01
 #define W25_STATUS_1_WEN    0x02
 
+#define W25_FS_PAGE_OFFSET 400
 typedef struct {
     uint8_t n_pages_written;
     uint8_t n_pages_read;

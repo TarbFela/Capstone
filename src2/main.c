@@ -64,12 +64,12 @@ void datalogger_irq() {
     static int first = 1;
 
     datalogging_buff[n] = T_glob;
-    n = (n+1)&0xFF;
+    n = (n+1)&0xFF; //256-size buffer
 
     if(!(n&0x7F) && !first) {
-        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x3F) << 8;
-        // TODO: clear page, not sector.
+        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x3F + W25_FS_PAGE_OFFSET) << 8;
         if(!(datalogging_fs.n_pages_written&0xF)) W25_Clear_Sector_Blocking(addr);
+        printf("addr: %08X\n",addr);
         W25_Program_Page_Blocking(addr, (uint8_t *)(&datalogging_buff[128-n]), 256);
     }
 
@@ -452,7 +452,7 @@ int main(void) {
             else {
                 printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x3F);
             }
-            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x3F)<<8;
+            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x3F + W25_FS_PAGE_OFFSET)<<8;
 
             W25_Read_Data(addr, rx_buff, 256);
 
@@ -535,8 +535,8 @@ int main(void) {
                 pwm_config config = pwm_get_default_config();
                 // 125MHz / 256 = 488.28kHz,
                 pwm_config_set_clkdiv_int(&config, 256);
-                // about 7.45Hz
-                config.top = 65535;
+                // about 14.9Hz
+                config.top = 32767;
                 irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
                 pwm_init(slicejunk, &config, true);
                 pwm_set_irq_enabled(slicejunk,true);
