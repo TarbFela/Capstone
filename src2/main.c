@@ -91,6 +91,7 @@ void isns_dma_handler() {
 
     uint32_t vtc_mv_4092 = 58349 - ((tsns_avg * 1971)>>7);
     VTCMV_glob = vtc_mv_4092;
+    vtc_mv_4092 += ktype_voltages_20C_x4092[2];
     uint16_t T = 0;
     for(T = 0; T < ktype_voltages_len; T++) {
         if(ktype_voltages_20C_x4092[T] <= vtc_mv_4092) {
