@@ -20,6 +20,7 @@
 #include "capstone_dsp.h"
 #include "capstone_adc.h"
 #include "capstone_thermocouple.h"
+#include "capstone_w25.h"
 
 
 #define PMIC_I2C_SDA_PIN 8
@@ -88,7 +89,6 @@ void isns_dma_handler() {
     // 15.4005 and 58,348.5
     // 15.4005 = 1,971.264 / 128 ... 1971 / 128 = 15.3984375
 
-
     uint32_t vtc_mv_4092 = 58349 - ((tsns_avg * 1971)>>7);
     VTCMV_glob = vtc_mv_4092;
     vtc_mv_4092 += ktype_voltages_20C_x4092[2];
@@ -96,11 +96,12 @@ void isns_dma_handler() {
     for(T = 0; T < ktype_voltages_len; T++) {
         if(ktype_voltages_20C_x4092[T] >= vtc_mv_4092) {
             T_glob = T+20;
+            int Tstepsize = ktype_voltages_20C_x4092[T] - ktype_voltages_20C_x4092[T-1];
+            int Tdiff = ktype_voltages_20C_x4092[T] - vtc_mv_4092;
+            T_glob = (T_glob*8) - ((8*Tdiff)/Tstepsize); // T_glob is eight times the actual temperature, with a resolution of 0.125degC
             break;
         }
     }
-
-
 
 
     // psuedo-integral control. Increment faster for bigger errors.
@@ -109,9 +110,9 @@ void isns_dma_handler() {
         // 62 = 4096 * 0.05 / 3.3
         // 15.5 = 62 / 4 since we want that kind of resolution on our PISP
         int targ = current_controller.PI_SP * 16;
-        d += (-(isns_avg > targ) + (isns_avg < targ)
-              - 2 * (isns_avg + 16 > targ) + 2 * (isns_avg - 16 < targ)
-              - 2 * (isns_avg + 32 > targ) + 2 * (isns_avg - 32 < targ));
+        d += (-(isns_avg*2 > targ) + (isns_avg*2 < targ)
+              - 2 * (isns_avg*2 + 16 > targ) + 2 * (isns_avg*2 - 16 < targ)
+              - 2 * (isns_avg*2 + 32 > targ) + 2 * (isns_avg*2 - 32 < targ));
         if(d>380) d= 380;
         if(d<105) d= 105;
         pwm_set_gpio_level(PWM1_GPIO_PIN,d);
@@ -379,6 +380,10 @@ int main(void) {
     gpio_pull_up(PMIC_I2C_SDA_PIN);
     gpio_pull_up(PMIC_I2C_SCL_PIN);
 
+    W25_Init();
+    uint8_t rx_buff[256];
+    char mydata[] = "Hello Capstone!\0\0\0\0\0\0\0\0";
+
     char ui = 0;
     int latch = 0;
     int pi_en_latch = 0;
@@ -388,14 +393,47 @@ int main(void) {
     while(1) {
         scanf("%c",&ui);
         if(ui=='q') break;
+        if(ui == 'h') {
+            printf("\t\t[HELP MENU]\n"
+                   "s: read Flash\n"
+                   "m: change multiplier\n"
+                   "0-9: set target current\n"
+                   "p & l: inc/dec target current\n"
+                   "i: test INA236 writing\n"
+                   "u: dep\n"
+                   "v: read INA236 bus voltage\n"
+                   "space: start/stop PWM output\n"
+                   "k: start/stop PI control\n"
+                   "g: use with network analyzer\n"
+                   "c: perform voffset sweep (dep)\n"
+                   "t: read out temperature conversion\n"
+                   "\n\n"
+                   );
+        }
+        if(ui == 's') {
+            W25_Clear_Sector_Blocking(0x500);
+            W25_Program_Page_Blocking(0x500, (uint8_t *)mydata ,20);
+            W25_Read_Data(0x500, &rx_buff[0], 32);
 
+            for(int i = 0 ; i< 13; i++) {
+                printf("%X ",mydata[i]);
+            }
+            printf("\n");
+
+            for(int i = 0 ; i< 13; i++) {
+                printf("%X ",rx_buff[i]);
+            }
+            printf("\n");
+
+            printf("DATA: %s\n", rx_buff);
+        }
         if(ui == 'm') {
             if((++D1_thresh_setting_multiplier)>6) D1_thresh_setting_multiplier=1;
             printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
         }
         if(ui >= '0' && ui <= '9') {
             PI_setpoint = 4*((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
-            printf("PI setpoint: %.2fA\n",PI_setpoint/4.0);
+            printf("PI setpoint: %.3fA\n",PI_setpoint/8.0);
             if(latch) {
                 multicore_fifo_push_blocking(PI_setpoint);
             }
@@ -403,7 +441,7 @@ int main(void) {
         if(ui == 'p' || ui == 'l') {
             if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/2;
             if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/2;
-            printf("PI setpoint: %.2fA\n",PI_setpoint/4.0);
+            printf("PI setpoint: %.3fA\n",PI_setpoint/8.0);
             if(latch) {
                 multicore_fifo_push_blocking(PI_setpoint);
             }
@@ -461,10 +499,10 @@ int main(void) {
             multicore_fifo_push_blocking(0xABCD);
         }
         if(ui == 'c') {
-            multicore_fifo_push_blocking(0xDEAD);
+            //multicore_fifo_push_blocking(0xDEAD);
         }
         if(ui == 't') {
-            printf("Temp: %d\tADC: %d\tVtc_mv: %d\n",T_glob, TSNS_ADC_value_12_bit_avg, VTCMV_glob);
+            printf("Temp: %.3f\tADC: %d\tVtc_mv: %d\n",T_glob/8.0, TSNS_ADC_value_12_bit_avg, VTCMV_glob);
         }
     }
 
