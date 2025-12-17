@@ -94,7 +94,7 @@ void isns_dma_handler() {
     vtc_mv_4092 += ktype_voltages_20C_x4092[2];
     uint16_t T = 0;
     for(T = 0; T < ktype_voltages_len; T++) {
-        if(ktype_voltages_20C_x4092[T] <= vtc_mv_4092) {
+        if(ktype_voltages_20C_x4092[T] >= vtc_mv_4092) {
             T_glob = T+20;
             break;
         }
@@ -112,8 +112,8 @@ void isns_dma_handler() {
         d += (-(isns_avg > targ) + (isns_avg < targ)
               - 2 * (isns_avg + 16 > targ) + 2 * (isns_avg - 16 < targ)
               - 2 * (isns_avg + 32 > targ) + 2 * (isns_avg - 32 < targ));
-        if(d>330) d= 330;
-        if(d<110) d= 110;
+        if(d>380) d= 380;
+        if(d<105) d= 105;
         pwm_set_gpio_level(PWM1_GPIO_PIN,d);
         pwm_set_gpio_level(PWM3_GPIO_PIN,d);
     }
