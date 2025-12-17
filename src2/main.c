@@ -24,17 +24,31 @@
 #define PMIC_I2C_SDA_PIN 8
 #define PMIC_I2C_SCL_PIN 9
 #define PMIC_I2C i2c0
+#define PMIC_I2C_TIMEOUT_US 10000
 
 #define NA_ADC_PIN 26
 
 // 48 MHz
 #define ADC_BASE_CLOCK_HZ 48000000
 
-
+mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
 volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
+
+int32_t INA236_read_bus_voltage() {
+    //printf("Reading INA236 Bus Voltage...\n");
+    uint8_t INA236B_msg[1] = {0x2};
+    uint8_t INA236_read_dst[2];
+    int i2cret = i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, PMIC_I2C_TIMEOUT_US);
+    if(i2cret != 1) return -1000;
+    i2cret = i2c_read_timeout_us(i2c0,0x48,INA236_read_dst,2,0,PMIC_I2C_TIMEOUT_US);
+    if(i2cret != 2) return -2000;
+    //printf("Read values: 0x%02X%02X\n",INA236_read_dst[0],INA236_read_dst[1]);
+    //printf("ADC value: %d\n",((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]));
+    return ((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]);
+}
 
 
 void isns_dma_handler() {
@@ -68,7 +82,8 @@ void isns_dma_handler() {
     // Don't change the duty cycle if the controller is paused.
     if(!current_controller.controller_paused) {
         // 62 = 4096 * 0.05 / 3.3
-        int targ = current_controller.PI_SP * 62;
+        // 15.5 = 62 / 4 since we want that kind of resolution on our PISP
+        int targ = current_controller.PI_SP * 16;
         d += (-(isns_avg > targ) + (isns_avg < targ)
               - 2 * (isns_avg + 16 > targ) + 2 * (isns_avg - 16 < targ)
               - 2 * (isns_avg + 32 > targ) + 2 * (isns_avg - 32 < targ));
@@ -109,11 +124,15 @@ void vtc_offset_sweep() {
     int ispi = 0;
 
     // sweep currents
-    for(int i = 6; i<25; i+=3) {
+    for(int i = 56; i<68; i+=5) {
+        if(!mutex_try_enter(&current_controller_lock,NULL)) {
+            printf("MUTEX CLAIMED!!!\n");
+            return;
+        }
         current_controller.PI_SP = i;
         sleep_ms(500);
         i_setpoints[ispi++] = i;
-        printf("SWEEP LEVEL %d...\n",i);
+        printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
         // for each current setpoint, take three pairs of measurements
         // first, an initial measurement set:
         //      output-off measurement
@@ -184,6 +203,7 @@ void vtc_offset_sweep() {
     }
 
     capstone_adc_stop(cas);
+    mutex_exit(&current_controller_lock);
 
     int mmi_ispi_ratio = (mmi+1)/(ispi+1);
     mmi--;
@@ -263,7 +283,7 @@ void other_core() {
 
     cas = (capstone_adc_struct_t *)malloc(sizeof(capstone_adc_struct_t));
     capstone_adc_init(cas, isns_dma_handler);
-
+    mutex_init(&current_controller_lock);
 
     PI_controller_init(&current_controller,
                        10,
@@ -296,10 +316,19 @@ void other_core() {
 
             capstone_adc_start(cas);
 
+
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
                 if (sig == 0xBEEF) break;
-                //current_controller.PI_SP = sig;
+                if(mutex_try_enter(&current_controller_lock,NULL)) {
+                    if (sig == 0xFACE) current_controller.controller_paused = !current_controller.controller_paused;
+                    else {
+                        current_controller.PI_SP = sig;
+                        printf("\tPISP %d\n", current_controller.PI_SP);
+                    }
+                    mutex_exit(&current_controller_lock);
+                }
+                else printf("MUTEX LOCKED\n");
             }
 
             printf("[CL control paused, all outputs to 0]\n");
@@ -361,15 +390,19 @@ int main(void) {
             printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
         }
         if(ui >= '0' && ui <= '9') {
-            PI_setpoint = ((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
-            printf("PI setpoint: %dA\n",PI_setpoint);
-            if(latch) multicore_fifo_push_blocking(PI_setpoint);
+            PI_setpoint = 4*((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
+            printf("PI setpoint: %.2fA\n",PI_setpoint/4.0);
+            if(latch) {
+                multicore_fifo_push_blocking(PI_setpoint);
+            }
         }
         if(ui == 'p' || ui == 'l') {
-            if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/4;
-            if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/4;
-            printf("PI setpoint: %dA\n",PI_setpoint);
-            if(latch) multicore_fifo_push_blocking(PI_setpoint);
+            if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/2;
+            if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/2;
+            printf("PI setpoint: %.2fA\n",PI_setpoint/4.0);
+            if(latch) {
+                multicore_fifo_push_blocking(PI_setpoint);
+            }
         }
         if(ui == 'i') {
             printf("Writing to INA236...\n");
@@ -416,6 +449,9 @@ int main(void) {
         if(ui == ' ') {
             latch = !latch;
             multicore_fifo_push_blocking(0xBEEF);
+        }
+        if(ui == 'k') {
+            multicore_fifo_push_blocking(0xFACE);
         }
         if(ui == 'g') {
             multicore_fifo_push_blocking(0xABCD);
