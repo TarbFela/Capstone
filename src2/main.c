@@ -133,7 +133,7 @@ void vtc_offset_sweep() {
     int ispi = 0;
 
     // sweep currents
-    for(int i = 56; i<68; i+=5) {
+    for(int i = 60; i<=74; i+=3) {
         printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
         current_controller.PI_SP = i;
         i_setpoints[ispi++] = i;
@@ -150,7 +150,7 @@ void vtc_offset_sweep() {
         pwm_set_gpio_level(PWM3_GPIO_PIN,100);
         pwm_set_gpio_level(PWM4_GPIO_PIN,100);
 
-        for(int ii = 0; ii<10; ii++) {
+        for(int ii = 0; ii<15; ii++) {
             current_controller.controller_paused = 0; sleep_ms(400);
             current_controller.controller_paused = 1; sleep_ms(100);
 
@@ -168,7 +168,7 @@ void vtc_offset_sweep() {
         pwm_set_gpio_level(PWM3_GPIO_PIN,0);
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
 
-        for(int ii = 0; ii<10; ii++) {
+        for(int ii = 0; ii<5; ii++) {
             sleep_ms(500);
 
             t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
@@ -295,12 +295,12 @@ void other_core() {
 
             capstone_adc_start(cas);
 
-
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
                 if (sig == 0xBEEF) break;
                 if(mutex_try_enter(&current_controller_lock,NULL)) {
-                    if (sig == 0xFACE) current_controller.controller_paused = !current_controller.controller_paused;
+                    if (sig == 0xFACE) { current_controller.controller_paused = !current_controller.controller_paused;
+                    printf("%s\n",current_controller.controller_paused ? "PAUSED" : "RESUMED");}
                     else {
                         current_controller.PI_SP = sig;
                         printf("\tPISP %d\n", current_controller.PI_SP);
@@ -319,6 +319,7 @@ void other_core() {
             pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
         }
+
         else if(ui == 0xABCD) {
             network_analyzer_slave_start();
             while (1) {
@@ -429,7 +430,7 @@ int main(void) {
             latch = !latch;
             multicore_fifo_push_blocking(0xBEEF);
         }
-        if(ui == 'k') {
+        if(ui == 'k' && latch) {
             multicore_fifo_push_blocking(0xFACE);
         }
         if(ui == 'g') {
