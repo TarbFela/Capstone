@@ -36,6 +36,7 @@ volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
 volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
+volatile uint16_t d_glob = 0;
 
 int32_t INA236_read_bus_voltage() {
     //printf("Reading INA236 Bus Voltage...\n");
@@ -92,6 +93,9 @@ void isns_dma_handler() {
         pwm_set_gpio_level(PWM1_GPIO_PIN,d);
         pwm_set_gpio_level(PWM3_GPIO_PIN,d);
     }
+    else {
+        d_glob = d;
+    }
 
 
     // clear the correct interrupt
@@ -110,14 +114,19 @@ void vtc_offset_sweep() {
     pwm_set_gpio_level(PWM3_GPIO_PIN,0);
     pwm_set_gpio_level(PWM4_GPIO_PIN,0);
 
+    if(!mutex_try_enter(&current_controller_lock,NULL)) {
+        printf("MUTEX CLAIMED!!!\n");
+        return;
+    }
+
     current_controller.controller_paused = 1;
     capstone_adc_start(cas);
+    sleep_ms(100);
 
-
-
-    sleep_ms(1000);
-    uint64_t time_us;
     uint16_t i_measurements[256];
+    uint16_t d_measurements[256];
+    int v_measurements[256];
+    int v_meas;
     uint16_t t_measurements[256];
     uint16_t i_setpoints[16];
     int mmi = 0;
@@ -125,20 +134,15 @@ void vtc_offset_sweep() {
 
     // sweep currents
     for(int i = 56; i<68; i+=5) {
-        if(!mutex_try_enter(&current_controller_lock,NULL)) {
-            printf("MUTEX CLAIMED!!!\n");
-            return;
-        }
-        current_controller.PI_SP = i;
-        sleep_ms(500);
-        i_setpoints[ispi++] = i;
         printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
-        // for each current setpoint, take three pairs of measurements
-        // first, an initial measurement set:
-        //      output-off measurement
-        //      output-on measurement (post-settling)
-        //      output-on measurement (after brief heating)
+        current_controller.PI_SP = i;
+        i_setpoints[ispi++] = i;
+
         t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+        v_meas = INA236_read_bus_voltage();
+        if(v_meas < -999) printf("BAD I2C...");
+        else v_measurements[mmi] = v_meas;
+        d_measurements[mmi] = 0;
         i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
 
         pwm_set_gpio_level(PWM1_GPIO_PIN,100);
@@ -146,59 +150,34 @@ void vtc_offset_sweep() {
         pwm_set_gpio_level(PWM3_GPIO_PIN,100);
         pwm_set_gpio_level(PWM4_GPIO_PIN,100);
 
-        current_controller.controller_paused = 0;
-        sleep_ms(400);
-        current_controller.controller_paused = 1;
-        sleep_ms(100);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-        current_controller.controller_paused = 0;
-        sleep_ms(400);
-        current_controller.controller_paused = 1;
-        sleep_ms(100);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-
-        // second, a middle-ground measurement set:
-        //      regular-interval measurements
-        current_controller.controller_paused = 0;
-
         for(int ii = 0; ii<10; ii++) {
-            printf("\tMID SWEEP %d...\n",ii);
-            sleep_ms(500);
-            current_controller.controller_paused = 1;
-            sleep_ms(500);
+            current_controller.controller_paused = 0; sleep_ms(400);
+            current_controller.controller_paused = 1; sleep_ms(100);
+
             t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+            v_meas = INA236_read_bus_voltage();
+            if (v_meas < -999) printf("BAD I2C...");
+            else v_measurements[mmi] = v_meas;
+            d_measurements[mmi] = d_glob;
             i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
         }
-        // third, a final ("warm") measurement set:
-        //      two well-spaced output-on measurements
-        //      two well-spaced output-off measurements
-        sleep_ms(1000);
-        current_controller.controller_paused = 1;
-        sleep_ms(100);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-        current_controller.controller_paused = 0;
-        sleep_ms(300);
-        current_controller.controller_paused = 1;
-        sleep_ms(100);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
 
+        current_controller.controller_paused = 1;
         pwm_set_gpio_level(PWM1_GPIO_PIN,0);
         pwm_set_gpio_level(PWM2_GPIO_PIN,0);
         pwm_set_gpio_level(PWM3_GPIO_PIN,0);
         pwm_set_gpio_level(PWM4_GPIO_PIN,0);
 
-        sleep_ms(400);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-        sleep_ms(400);
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        for(int ii = 0; ii<10; ii++) {
+            sleep_ms(500);
 
-        printf("Cooling down...\n");
+            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+            v_meas = INA236_read_bus_voltage();
+            if (v_meas < -999) printf("BAD I2C...");
+            else v_measurements[mmi] = v_meas;
+            d_measurements[mmi] = 0;
+            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+        }
         sleep_ms(500);
     }
 
@@ -206,11 +185,11 @@ void vtc_offset_sweep() {
     mutex_exit(&current_controller_lock);
 
     int mmi_ispi_ratio = (mmi+1)/(ispi+1);
-    mmi--;
+    ;
     while(ispi--) {
         printf("%d,\n",i_setpoints[ispi]);
-        for(int ii = 0; ii<17; ii++) {
-            printf("\t ,%d, %d\n",i_measurements[mmi],t_measurements[mmi--]);
+        for(int ii = 0; ii<21; ii++) {
+            printf("\t ,%d, %d, %d, %d,\n",i_measurements[--mmi],t_measurements[mmi],d_measurements[mmi],v_measurements[mmi]);
         }
     }
 
