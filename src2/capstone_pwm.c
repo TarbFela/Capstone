@@ -15,6 +15,10 @@ void capstone_pwm_init() {
     uint slice_num2 = pwm_gpio_to_slice_num(gpio2);
     uint slice_num3 = pwm_gpio_to_slice_num(gpio3);
     uint slice_num4 = pwm_gpio_to_slice_num(gpio4);
+    pwm_set_irq_enabled(slice_num1,false);
+    pwm_set_irq_enabled(slice_num2,false);
+    pwm_set_irq_enabled(slice_num3,false);
+    pwm_set_irq_enabled(slice_num4,false);
 
     uint chan_num1 = pwm_gpio_to_channel(gpio1);
     uint chan_num2 = pwm_gpio_to_channel(gpio2);
@@ -29,6 +33,7 @@ void capstone_pwm_init() {
 
     pwm_config config = pwm_get_default_config();
     pwm_config_set_clkdiv_int(&config, 1);
+
     config.top = 1000; //125MHz --> 125kHz
     pwm_init(slice_num1, &config, false);
     pwm_init(slice_num2, &config, false);

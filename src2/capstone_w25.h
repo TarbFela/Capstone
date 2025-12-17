@@ -16,8 +16,7 @@
 
 #include "hardware/spi.h"
 
-#define LED_PIN 0
-
+// TODO: HUGE, NEED TO DO ERROR PROPOGATION WITH AN ENUM. HOWEVER IT IS 5AM SO I WILL NOT DO IT IN TIME FOR DESIGN REVIEW.
 
 
 #define W25_SPI spi1
@@ -41,6 +40,10 @@
 #define W25_STATUS_1_BUSY   0x01
 #define W25_STATUS_1_WEN    0x02
 
+typedef struct {
+    uint8_t n_pages_written;
+    uint8_t n_pages_read;
+} W25_filesystem_t;
 
 void W25_Write_Enable();
 
@@ -58,9 +61,9 @@ void W25_Clear_Sector_Blocking(uint32_t address);
 // Write N bytes to address (N < 256)
 // note that exceeding the page-alignment (256bytes) will cause a wraparound.
 // note also that you must wait for the write to finish before using the W25 again
-void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint8_t n_bytes);
+void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes);
 
-void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint8_t n_bytes);
+void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes);
 
 void W25_Read_Data(uint32_t address, uint8_t *dst, uint32_t n_bytes);
 

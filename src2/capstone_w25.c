@@ -55,7 +55,7 @@ void W25_Clear_Sector_Blocking(uint32_t address) {
 // Write N bytes to address (N < 256)
 // note that exceeding the page-alignment (256bytes) will cause a wraparound.
 // note also that you must wait for the write to finish before using the W25 again
-void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint8_t n_bytes) {
+void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes) {
     W25_Write_Enable();
     // write data
     gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
@@ -67,7 +67,7 @@ void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint8_t n_byt
     //sleep_us(5);
 }
 
-void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint8_t n_bytes) {
+void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes) {
     W25_Program_Page_No_Blocking(address, data, n_bytes);
     W25_Block_While_Busy();
 

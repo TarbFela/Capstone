@@ -30,8 +30,7 @@
 
 #define NA_ADC_PIN 26
 
-// 48 MHz
-#define ADC_BASE_CLOCK_HZ 48000000
+#define PWMTOOL_GPIO_PIN 7
 
 mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
@@ -55,7 +54,28 @@ int32_t INA236_read_bus_voltage() {
     return ((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]);
 }
 
+uint gpiojunk;
+uint slicejunk;
+uint16_t *datalogging_buff;
+W25_filesystem_t datalogging_fs;
 
+void datalogger_irq() {
+    static int n = 0;
+    static int first = 1;
+
+    datalogging_buff[n] = T_glob;
+    n = (n+1)&0xFF;
+
+    if(!(n&0x7F) && !first) {
+        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x7) << 8;
+        W25_Clear_Sector_Blocking(addr);
+        W25_Program_Page_Blocking(addr, (uint8_t *)(&datalogging_buff[128-n]), 256);
+    }
+
+    if(first) {printf("DATALOGGING!!\n");}
+    first = 0;
+    pwm_clear_irq(slicejunk);
+}
 void isns_dma_handler() {
     static int d = 100;
     //debugging toggle
@@ -382,7 +402,16 @@ int main(void) {
 
     W25_Init();
     uint8_t rx_buff[256];
-    char mydata[] = "Hello Capstone!\0\0\0\0\0\0\0\0";
+    char mydata[] = "Hello Crapstone!\0\0\0\0\0\0\0\0";
+
+    datalogging_buff = (uint16_t *)malloc(sizeof(uint16_t)*256);
+    if(datalogging_buff == NULL) {
+        sleep_ms(5000);
+        printf("BAD MALLOC\n");
+        return -1;
+    }
+    datalogging_fs.n_pages_read = 0;
+    datalogging_fs.n_pages_written = 0;
 
     char ui = 0;
     int latch = 0;
@@ -411,21 +440,27 @@ int main(void) {
                    );
         }
         if(ui == 's') {
-            W25_Clear_Sector_Blocking(0x500);
-            W25_Program_Page_Blocking(0x500, (uint8_t *)mydata ,20);
-            W25_Read_Data(0x500, &rx_buff[0], 32);
+            if(latch) {
+                printf("Stop collection to read...\n");
+                continue;
+            }
+            else if(datalogging_fs.n_pages_read >= datalogging_fs.n_pages_written) {
+                printf("No more pages written yet...\n");
+                continue;
+            }
+            else {
+                printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x7);
+            }
+            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x7)<<8;
 
-            for(int i = 0 ; i< 13; i++) {
-                printf("%X ",mydata[i]);
+            W25_Read_Data(addr, rx_buff, 256);
+
+            uint16_t *rx_data = (uint16_t *)rx_buff;
+            for(int i = 0 ; i< 128; i++) {
+                printf("%3.3f ",rx_data[i]/8.0);
+                if(!((i+1)&0x7)) printf("\n");
             }
             printf("\n");
-
-            for(int i = 0 ; i< 13; i++) {
-                printf("%X ",rx_buff[i]);
-            }
-            printf("\n");
-
-            printf("DATA: %s\n", rx_buff);
         }
         if(ui == 'm') {
             if((++D1_thresh_setting_multiplier)>6) D1_thresh_setting_multiplier=1;
@@ -491,6 +526,26 @@ int main(void) {
         if(ui == ' ') {
             latch = !latch;
             multicore_fifo_push_blocking(0xBEEF);
+            gpiojunk = PWMTOOL_GPIO_PIN;
+            slicejunk = pwm_gpio_to_slice_num(gpiojunk);
+            if(latch) {
+                sleep_ms(100);
+                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
+                pwm_config config = pwm_get_default_config();
+                // 125MHz / 256 = 488.28kHz,
+                pwm_config_set_clkdiv_int(&config, 256);
+                // about 7.45Hz
+                config.top = 65535;
+                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
+                pwm_init(slicejunk, &config, true);
+                pwm_set_irq_enabled(slicejunk,true);
+                irq_set_enabled(PWM_IRQ_WRAP,true);
+            }
+            else {
+                pwm_set_irq_enabled(slicejunk,false);
+                pwm_set_enabled(slicejunk,false);
+                irq_set_enabled(PWM_IRQ_WRAP,false);
+            }
         }
         if(ui == 'k' && latch) {
             multicore_fifo_push_blocking(0xFACE);
