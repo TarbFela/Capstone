@@ -67,8 +67,8 @@ void datalogger_irq() {
     n = (n+1)&0xFF; //256-size buffer
 
     if(!(n&0x7F) && !first) {
-        uint32_t addr = ((datalogging_fs.n_pages_written++)&0x3F + W25_FS_PAGE_OFFSET) << 8;
-        if(!(datalogging_fs.n_pages_written&0xF)) W25_Clear_Sector_Blocking(addr);
+        uint32_t addr = W25_FS_PAGE_OFFSET<<8;
+        W25_Clear_Sector_Blocking(addr);
         printf("addr: %08X\n",addr);
         W25_Program_Page_Blocking(addr, (uint8_t *)(&datalogging_buff[128-n]), 256);
     }
@@ -131,11 +131,9 @@ void isns_dma_handler() {
         // 62 = 4096 * 0.05 / 3.3
         // 15.5 = 62 / 4 since we want that kind of resolution on our PISP
         int targ = current_controller.PI_SP * 16;
-        d += (-(isns_avg*2 > targ) + (isns_avg*2 < targ)
-              - 2 * (isns_avg*2 + 16 > targ) + 2 * (isns_avg*2 - 16 < targ)
-              - 2 * (isns_avg*2 + 32 > targ) + 2 * (isns_avg*2 - 32 < targ));
+        d += -(isns_avg*2 > targ) + (isns_avg*2 < targ) - 2 * (isns_avg*2 + 16 > targ) - 2 * (isns_avg*2 + 32 > targ);
         if(d>380) d= 380;
-        if(d<105) d= 105;
+        if(d<90) d= 90;
         pwm_set_gpio_level(PWM1_GPIO_PIN,d);
         pwm_set_gpio_level(PWM3_GPIO_PIN,d);
     }
@@ -383,14 +381,13 @@ void other_core() {
 }
 
 int main(void) {
+                        /*** INITS ***/
     stdio_init_all();
     sleep_ms(1000);
 
     multicore_launch_core1(other_core);
     sleep_ms(1000);
     multicore_fifo_pop_blocking();
-
-    //sleep_ms(5000);
 
     capstone_pwm_init();
     printf("Hello Capstone World!\n");
@@ -420,9 +417,13 @@ int main(void) {
     int D1_thresh = 10;
     int D1_thresh_setting_multiplier = 2;
     int PI_setpoint = 10;
+
+                            /*** UI CONTROLLER ***/
     while(1) {
         scanf("%c",&ui);
+        // QUIT
         if(ui=='q') break;
+        // HELP MENU
         if(ui == 'h') {
             printf("\t\t[HELP MENU]\n"
                    "s: read Flash\n"
@@ -445,14 +446,14 @@ int main(void) {
                 printf("Stop collection to read...\n");
                 continue;
             }
-            else if(datalogging_fs.n_pages_read >= datalogging_fs.n_pages_written) {
-                printf("No more pages written yet...\n");
-                continue;
-            }
+            //else if(datalogging_fs.n_pages_read >= datalogging_fs.n_pages_written) {
+            //    printf("No more pages written yet...\n");
+            //    continue;
+            //}
             else {
                 printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x3F);
             }
-            uint32_t addr = ((datalogging_fs.n_pages_read++)&0x3F + W25_FS_PAGE_OFFSET)<<8;
+            uint32_t addr = W25_FS_PAGE_OFFSET<<8;
 
             W25_Read_Data(addr, rx_buff, 256);
 
