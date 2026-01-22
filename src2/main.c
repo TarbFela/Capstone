@@ -418,7 +418,7 @@ int main(void) {
     int D1_thresh_setting_multiplier = 2;
     int PI_setpoint = 10;
 
-                            /*** UI CONTROLLER ***/
+
     while(1) {
         scanf("%c",&ui);
         // QUIT
