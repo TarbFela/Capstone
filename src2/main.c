@@ -382,24 +382,29 @@ void other_core() {
         else if(ui == UI_SIG_PWM_START_STOP) {
             uint16_t pwm_lvl = 100;
             printf("[PWM started. Press 'r' to see status, press the spacebar to pause.]\n");
-            pwm_set_gpio_level(PWM1_GPIO_PIN, pwm_lvl);
-            pwm_set_gpio_level(PWM2_GPIO_PIN, 100);
-            pwm_set_gpio_level(PWM3_GPIO_PIN, pwm_lvl);
-            pwm_set_gpio_level(PWM4_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM1_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM2_GPIO_PIN, pwm_lvl);
+            pwm_set_gpio_level(PWM3_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM4_GPIO_PIN, pwm_lvl);
 
             adc_select_input(ISNS_ADC_PIN - 26);
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
                 if (sig == UI_SIG_PWM_START_STOP) break;
                 else if(sig == UI_SIG_PWM_READ_ISNS) {
-                    printf("ADC %04d\n",adc_read());
+                    uint16_t val = adc_read();
+                    float valamps = (float)val/93.1;
+                    printf("ADC %04d\t%2.1f\t",val,valamps);
+                    val = adc_read();
+                    valamps = (float)val/93.1;
+                    printf("ADC %04d\t%2.1f\n",val,valamps);
                     continue;
                 }
                 else if(sig == UI_SIG_PWM_INC) pwm_lvl += 10;
                 else if(sig == UI_SIG_PWM_DEC) pwm_lvl -= 10;
                 else if(sig <= 9) pwm_lvl = sig*50 + 100;
-                pwm_set_gpio_level(PWM1_GPIO_PIN, pwm_lvl);
-                pwm_set_gpio_level(PWM3_GPIO_PIN, pwm_lvl);
+                pwm_set_gpio_level(PWM2_GPIO_PIN, pwm_lvl);
+                pwm_set_gpio_level(PWM4_GPIO_PIN, pwm_lvl);
                 printf("\tPWM %d\n",pwm_lvl);
             }
             multicore_fifo_drain();
