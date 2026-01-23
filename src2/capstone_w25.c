@@ -57,13 +57,15 @@ void W25_Clear_Sector_Blocking(uint32_t address) {
 // note also that you must wait for the write to finish before using the W25 again
 void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes) {
     W25_Write_Enable();
+    //uint8_t *tx_buff = (uint8_t *)malloc(sizeof(uint8_t)*(n_bytes + 4) );
     // write data
     gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
     uint8_t cmd_buff[4] = { PAGE_PROGRAM, (address>>16)&0xFF, (address >> 8)&0xFF, address&0xFF};
-    for(uint8_t i = 4; i < 16; i++) cmd_buff[i] = i; // some data
+    //for(uint8_t i = 4; i < 16; i++) cmd_buff[i] = i; // some data
     spi_write_blocking(W25_SPI, &cmd_buff[0], 4);
     spi_write_blocking(W25_SPI, data, n_bytes);
     gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    //free(tx_buff);
     //sleep_us(5);
 }
 
