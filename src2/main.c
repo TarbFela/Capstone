@@ -106,7 +106,7 @@ void isns_dma_handler() {
     for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) tsns_avg += data[2*i + 1];
     
     // TODO: the current buffer size is 256 with a quarter-size (half per DMA, half per ADC ch) of 64. Divide by 2^6.
-    tsns_avg>>=6; // bring TSNS to 14-bit average as opposed to 12-bit
+    tsns_avg>>=6;
     TSNS_ADC_value_12_bit_avg = tsns_avg;
     isns_avg>>=6;
     ISNS_ADC_value_12_bit_avg = isns_avg;
@@ -117,7 +117,6 @@ void isns_dma_handler() {
     // Vtc,mv,4092 = -ADCval * 3300/214.28 + 2908.9 * 4092 / 204
     // 15.4005 and 58,348.5
     // 15.4005 = 1,971.264 / 128 ... 1971 / 128 = 15.3984375
-
     uint32_t vtc_mv_4092 = 58349 - ((tsns_avg * 1971)>>7);
     VTCMV_glob = vtc_mv_4092;
     vtc_mv_4092 += ktype_voltages_20C_x4092[2];
@@ -136,14 +135,18 @@ void isns_dma_handler() {
     // psuedo-integral control. Increment faster for bigger errors.
     // Don't change the duty cycle if the controller is paused.
     if(!current_controller.controller_paused) {
+        //          OLD GAIN VALUE WITH G=100
         // 62 = 4096 * 0.05 / 3.3
         // 15.5 = 62 / 4 since we want that kind of resolution on our PISP
-        int targ = current_controller.PI_SP * 16;
+        //          NEW GAIN VALUE WITH G=150
+        // 4096 * 0.0005 * 150 / 3.3 = 93.1
+        // 23.75 ≈ 24 = 93.1 / 4 as per above resolution comment
+        int targ = current_controller.PI_SP * 24;
         d += -(isns_avg*2 > targ) + (isns_avg*2 < targ) - 2 * (isns_avg*2 + 16 > targ) - 2 * (isns_avg*2 + 32 > targ);
         if(d>380) d= 380;
         if(d<90) d= 90;
-        pwm_set_gpio_level(PWM1_GPIO_PIN,d);
-        pwm_set_gpio_level(PWM3_GPIO_PIN,d);
+        pwm_set_gpio_level(PWM2_GPIO_PIN,d);
+        pwm_set_gpio_level(PWM4_GPIO_PIN,d);
     }
     else {
         d_glob = d;
