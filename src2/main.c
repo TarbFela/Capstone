@@ -32,6 +32,14 @@
 
 #define PWMTOOL_GPIO_PIN 7
 
+#define UI_SIG_ICTL_START_STOP 0xBEEF
+#define UI_SIG_NA_START_STOP 0xABCD
+#define UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE 0xFACE
+#define UI_SIG_PWM_INC 0xBABB
+#define UI_SIG_PWM_DEC 0xBABA
+#define UI_SIG_PWM_START_STOP 0xBAAA
+#define UI_SIG_PWM_READ_ISNS 0xBAAB
+
 mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
 
@@ -147,7 +155,6 @@ void isns_dma_handler() {
     // debugging toggler
     sio_hw->gpio_togl = 0x1<<18;
 }
-
 
 void vtc_offset_sweep() {
     printf("[RUNNING VTC OFFSET SWEEP]\n");
@@ -301,7 +308,7 @@ void network_analyzer_slave_stop() {
 }
 
 void other_core() {
-    multicore_fifo_push_blocking(0xBEEF);
+    multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
     printf("MULTICORE EXPLOSION!!!\n");
 
     cas = (capstone_adc_struct_t *)malloc(sizeof(capstone_adc_struct_t));
@@ -329,7 +336,7 @@ void other_core() {
     int ui = 0;
     while(1) {
         ui = multicore_fifo_pop_blocking();
-        if(ui == 0xBEEF) {
+        if(ui == UI_SIG_ICTL_START_STOP) {
 
             printf("[CL control started. Press 'r' to see status, press the spacebar to pause.]\n");
             pwm_set_gpio_level(PWM1_GPIO_PIN, 100);
@@ -341,9 +348,9 @@ void other_core() {
 
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
-                if (sig == 0xBEEF) break;
+                if (sig == UI_SIG_ICTL_START_STOP) break;
                 if(mutex_try_enter(&current_controller_lock,NULL)) {
-                    if (sig == 0xFACE) { current_controller.controller_paused = !current_controller.controller_paused;
+                    if (sig == UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE) { current_controller.controller_paused = !current_controller.controller_paused;
                     printf("%s\n",current_controller.controller_paused ? "PAUSED" : "RESUMED");}
                     else {
                         current_controller.PI_SP = sig;
@@ -363,15 +370,45 @@ void other_core() {
             pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
         }
-
-        else if(ui == 0xABCD) {
+        else if(ui == UI_SIG_NA_START_STOP) {
             network_analyzer_slave_start();
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
-                if (sig == 0xABCD) break;
+                if (sig == UI_SIG_NA_START_STOP) break;
                 //current_controller.PI_SP = sig;
             }
             network_analyzer_slave_stop();
+        }
+        else if(ui == UI_SIG_PWM_START_STOP) {
+            uint16_t pwm_lvl = 100;
+            printf("[PWM started. Press 'r' to see status, press the spacebar to pause.]\n");
+            pwm_set_gpio_level(PWM1_GPIO_PIN, pwm_lvl);
+            pwm_set_gpio_level(PWM2_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM3_GPIO_PIN, pwm_lvl);
+            pwm_set_gpio_level(PWM4_GPIO_PIN, 100);
+
+            adc_select_input(ISNS_ADC_PIN - 26);
+            while (1) {
+                uint32_t sig = multicore_fifo_pop_blocking();
+                if (sig == UI_SIG_PWM_START_STOP) break;
+                else if(sig == UI_SIG_PWM_READ_ISNS) {
+                    printf("ADC %04d\n",adc_read());
+                    continue;
+                }
+                else if(sig == UI_SIG_PWM_INC) pwm_lvl += 10;
+                else if(sig == UI_SIG_PWM_DEC) pwm_lvl -= 10;
+                else if(sig <= 9) pwm_lvl = sig*50 + 100;
+                pwm_set_gpio_level(PWM1_GPIO_PIN, pwm_lvl);
+                pwm_set_gpio_level(PWM3_GPIO_PIN, pwm_lvl);
+                printf("\tPWM %d\n",pwm_lvl);
+            }
+            multicore_fifo_drain();
+            printf("[PWM paused, all outputs to 0]\n");
+
+            pwm_set_gpio_level(PWM1_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
         }
         else if(ui == 0xDEAD) {
             vtc_offset_sweep();
@@ -412,7 +449,8 @@ int main(void) {
     datalogging_fs.n_pages_written = 0;
 
     char ui = 0;
-    int latch = 0;
+    int ict_latch = 0;
+    int pwm_latch = 0;
     int pi_en_latch = 0;
     int D1_thresh = 10;
     int D1_thresh_setting_multiplier = 2;
@@ -428,7 +466,7 @@ int main(void) {
             printf("\t\t[HELP MENU]\n"
                    "s: read Flash\n"
                    "m: change multiplier\n"
-                   "0-9: set target current\n"
+                   "0-9: set target current or pwm\n"
                    "p & l: inc/dec target current\n"
                    "i: test INA236 writing\n"
                    "u: dep\n"
@@ -438,11 +476,14 @@ int main(void) {
                    "g: use with network analyzer\n"
                    "c: perform voffset sweep (dep)\n"
                    "t: read out temperature conversion\n"
+                   "j: direct PWM control\n"
+                   "r: read raw ISNS ADC value (PWM mode)\n"
+                   "spacebar: current controller\n"
                    "\n\n"
                    );
         }
         if(ui == 's') {
-            if(latch) {
+            if(ict_latch) {
                 printf("Stop collection to read...\n");
                 continue;
             }
@@ -469,18 +510,29 @@ int main(void) {
             printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
         }
         if(ui >= '0' && ui <= '9') {
+            if(pwm_latch) {
+                // push the int value entered from 0 to 9
+                multicore_fifo_push_blocking((uint32_t)(ui) - '0');
+                continue;
+            }
             PI_setpoint = 4*((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
             printf("PI setpoint: %.3fA\n",PI_setpoint/8.0);
-            if(latch) {
+            if(ict_latch) {
                 multicore_fifo_push_blocking(PI_setpoint);
             }
         }
         if(ui == 'p' || ui == 'l') {
-            if(ui=='p') PI_setpoint+= D1_thresh_setting_multiplier/2;
-            if(ui=='l') PI_setpoint+= -D1_thresh_setting_multiplier/2;
-            printf("PI setpoint: %.3fA\n",PI_setpoint/8.0);
-            if(latch) {
-                multicore_fifo_push_blocking(PI_setpoint);
+            if(ict_latch) {
+                if (ui == 'p') PI_setpoint += D1_thresh_setting_multiplier / 2;
+                if (ui == 'l') PI_setpoint += -D1_thresh_setting_multiplier / 2;
+                printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
+                if (ict_latch) {
+                    multicore_fifo_push_blocking(PI_setpoint);
+                }
+            }
+            else if (pwm_latch) {
+                if(ui == 'p') multicore_fifo_push_blocking(UI_SIG_PWM_INC);
+                if(ui == 'l') multicore_fifo_push_blocking(UI_SIG_PWM_DEC);
             }
         }
         if(ui == 'i') {
@@ -525,35 +577,40 @@ int main(void) {
             printf("ADC value: %d\n",((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]));
             free(INA236_read_dst);
         }
-        if(ui == ' ') {
-            latch = !latch;
-            multicore_fifo_push_blocking(0xBEEF);
+        if(ui == ' ' && !pwm_latch) {
+            ict_latch = !ict_latch;
+            multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
             gpiojunk = PWMTOOL_GPIO_PIN;
             slicejunk = pwm_gpio_to_slice_num(gpiojunk);
-            if(latch) {
-                sleep_ms(100);
-                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
-                pwm_config config = pwm_get_default_config();
-                // 125MHz / 256 = 488.28kHz,
-                pwm_config_set_clkdiv_int(&config, 256);
-                // about 14.9Hz
-                config.top = 32767;
-                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
-                pwm_init(slicejunk, &config, true);
-                pwm_set_irq_enabled(slicejunk,true);
-                irq_set_enabled(PWM_IRQ_WRAP,true);
-            }
-            else {
-                pwm_set_irq_enabled(slicejunk,false);
-                pwm_set_enabled(slicejunk,false);
-                irq_set_enabled(PWM_IRQ_WRAP,false);
-            }
+//            if(ict_latch) {
+//                sleep_ms(100);
+//                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
+//                pwm_config config = pwm_get_default_config();
+//                // 125MHz / 256 = 488.28kHz,
+//                pwm_config_set_clkdiv_int(&config, 256);
+//                // about 14.9Hz
+//                config.top = 32767;
+//                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
+//                pwm_init(slicejunk, &config, true);
+//                pwm_set_irq_enabled(slicejunk,true);
+//                irq_set_enabled(PWM_IRQ_WRAP,true);
+//            }
+//            else {
+//                pwm_set_irq_enabled(slicejunk,false);
+//                pwm_set_enabled(slicejunk,false);
+//                irq_set_enabled(PWM_IRQ_WRAP,false);
+//            }
         }
-        if(ui == 'k' && latch) {
-            multicore_fifo_push_blocking(0xFACE);
+        if(ui == 'j' && !ict_latch) {
+            pwm_latch = !pwm_latch;
+            multicore_fifo_push_blocking(UI_SIG_PWM_START_STOP);
+        }
+        if(ui == 'r' && pwm_latch) multicore_fifo_push_blocking(UI_SIG_PWM_READ_ISNS);
+        if(ui == 'k' && ict_latch) {
+            multicore_fifo_push_blocking(UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE);
         }
         if(ui == 'g') {
-            multicore_fifo_push_blocking(0xABCD);
+            multicore_fifo_push_blocking(UI_SIG_NA_START_STOP);
         }
         if(ui == 'c') {
             //multicore_fifo_push_blocking(0xDEAD);
