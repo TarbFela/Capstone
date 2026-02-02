@@ -100,53 +100,39 @@ int main() {
 //        my_fs.n_files++;
 //    }
 
-    while(1) {
-        printf("Enter an address:\n>> 0x");
-        uint32_t waddr = 0;
-        scanf(" %x",&waddr);
-        printf("You gave: 0x%04X or %d\n",waddr,waddr);
-        printf("Would you like to erase this sector (0x%X)? (y/n)\n",waddr&(~0xFFF));
-        ui[0] = 0;
-        scanf(" %c",(char *)ui);
-        printf("You entered %c (%0xX)\n",ui[0], ui[0]);
-        if(ui[0] == 'y') {
-            printf("Clearing sector...\t\t");
-            W25_Clear_Sector_Blocking(waddr&(~0xFFF));
-            printf("Sector cleared.\n");
-        }
-        printf("Enter some data and terminate with a newline:\n>> ");
-        char *uip = &ui[0];
-        ui[0] = 0;
-        while(1) {
-            scanf("%c",uip);
-            printf("%c",*uip);
-            if(*uip == '\n') break;
-            uip++;
-        }
-        int ui_msg_len = uip - &ui[0] - 1;
-        printf("\nYou entered a string with length: %d\n",uip - &ui[0]);
-        printf("writing message to address...\t\t");
-        W25_Program_Page_Blocking(waddr,(uint8_t *)ui, ui_msg_len);
-        printf("write complete\n");
-        printf("status: %d\n",W25_Read_Status_1());
-        printf("Press 'r' to read data, otherwise no read...\n");
-        ui[0] = 0;
-        scanf(" %c", ((char *) ui) );
+    sleep_ms(100);
+    uint8_t *rx_buff = (uint8_t *)malloc(sizeof(uint8_t)*256);
+    uint8_t *tx_buff = (uint8_t *)malloc(sizeof(uint8_t)*256);
+    strcpy((char *)tx_buff,"test");
+    uint32_t waddr = 0x11000;
+
+    printf("clearing sector 0x11000...");
+    W25_Clear_Sector_Blocking(0x11000U);
+    printf("\t\tcleared with status: %d\n",W25_Read_Status_1());
+    while(waddr<0x11600) {
+        printf("writing msg at 0x%06X...",waddr);
+        W25_Program_Page_Blocking(waddr, tx_buff, 4);
+        waddr+=8;
+        printf("\t\twrite attempt made with status %d\n",W25_Read_Status_1());
+
+        scanf(" %c",ui);
         if(ui[0] == 'r') {
             printf("reading page (0x%X)...\t\t", waddr & (~0xFF));
-            uint8_t rx_buff[256];
+            for(int i = 0; i<256; i++) rx_buff[i] = 0;
             W25_Read_Data(waddr & (~0xFF), rx_buff, 256);
             printf("read complete.\n");
-            for (int i = 0; i < 256; i++) printf("%c", rx_buff[i]);
-            printf("\n");
-            for (int i = 0; i < 256; i++) printf("%02X ", rx_buff[i]);
-            printf("\n");
+            for (int i = 0; i < 256; i++) {
+                printf("%c", rx_buff[i]);
+                if(((i+1)&0x1F)==0) printf("\n");
+            }
+            printf("\n\n");
+            sleep_ms(500);
         }
-        printf("Done. Enter 'q' to quit...\n");
-        ui[0] = 0;
-        scanf(" %c", ((char *) ui) );
-        if(ui[0] == 'q') break;
+        else if(ui[0] == 'q') break;
     }
+
+    printf("Done. Provide a character to exit.\n");
+    scanf(" %c",ui);
 
     reboot:
     printf("\n\nREBOOT!\n");
