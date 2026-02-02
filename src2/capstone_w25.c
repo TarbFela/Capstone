@@ -8,11 +8,11 @@
 
 void W25_Write_Enable() {
     // write enable
-    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
+    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT); sleep_us(W25_CS_SLEEPTIME_US);
     uint8_t cmd_buff[1] = {WRITE_ENABLE};
     spi_write_blocking(W25_SPI, &cmd_buff[0], 1);
     //sleep_us(5);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
     //sleep_us(5);
 }
 
@@ -20,12 +20,12 @@ void W25_Write_Enable() {
 uint8_t W25_Read_Status_1() {
     uint8_t status_reg = 0xFF;
     // read status
-    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
+    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT); sleep_us(W25_CS_SLEEPTIME_US);
     uint8_t cmd_buff[1] = {READ_STATUS_REG_1};
     spi_write_blocking(W25_SPI, &cmd_buff[0], 1);
     spi_read_blocking(W25_SPI, 0, &status_reg, 1);
     //sleep_us(5);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
     //sleep_us(5);
     return status_reg;
 }
@@ -38,11 +38,11 @@ void W25_Block_While_Busy() {
 void W25_Clear_Sector_No_Blocking(uint32_t address) {
     W25_Write_Enable();
     // clear sector
-    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
+    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT); sleep_us(W25_CS_SLEEPTIME_US);
     uint8_t cmd_buff[4] = { SECTOR_ERASE, (address>>16)&0xFF, (address >> 8)&0xFF, address&0xFF};
     spi_write_blocking(W25_SPI, &cmd_buff[0], 4); // sector erase plus 24-bit address
     //sleep_us(5);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
     //sleep_us(5);
 }
 
@@ -58,11 +58,11 @@ void W25_Clear_Sector_Blocking(uint32_t address) {
 void W25_Program_Page_No_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes) {
     W25_Write_Enable();
     // write data
-    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
+    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT); sleep_us(W25_CS_SLEEPTIME_US);
     uint8_t cmd_buff[4] = { PAGE_PROGRAM, (address>>16)&0xFF, (address >> 8)&0xFF, address&0xFF};
     spi_write_blocking(W25_SPI, &cmd_buff[0], 4);
     spi_write_blocking(W25_SPI, data, n_bytes);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
 }
 
 void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes) {
@@ -73,16 +73,16 @@ void W25_Program_Page_Blocking(uint32_t address, uint8_t *data, uint16_t n_bytes
 
 void W25_Read_Data(uint32_t address, uint8_t *dst, uint32_t n_bytes) {
     // read data
-    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT);
+    gpio_put(W25_SPI_CS_PIN,W25_CS_SELECT); sleep_us(W25_CS_SLEEPTIME_US);
     uint8_t cmd_buff[4] = { READ_DATA, (address>>16)&0xFF, (address >> 8)&0xFF, address&0xFF};
     spi_write_blocking(W25_SPI, &cmd_buff[0], 4);
     spi_read_blocking(W25_SPI,0,dst,n_bytes);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
 }
 
 void W25_Init() {
     gpio_init(W25_SPI_CS_PIN);
-    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);
+    gpio_put(W25_SPI_CS_PIN, W25_CS_DESELECT);; sleep_us(W25_CS_SLEEPTIME_US);
     gpio_set_dir(W25_SPI_CS_PIN, GPIO_OUT);
 
     spi_init(W25_SPI, 5*100*1000); // 500kHz

@@ -27,6 +27,7 @@
 
 #define W25_CS_DESELECT     1
 #define W25_CS_SELECT       0
+#define W25_CS_SLEEPTIME_US 10
 
 // commands
 #define READ_STATUS_REG_1   0x05
