@@ -47,7 +47,7 @@ volatile capstone_adc_struct_t *cas;
 volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
 volatile uint16_t d_glob = 0;
 volatile uint16_t T_glob = 0;
-volatile uint32_t VTCMV_glob;
+volatile uint32_t VTCMV_glob = 0;
 
 int32_t INA236_read_bus_voltage() {
     //printf("Reading INA236 Bus Voltage...\n");
@@ -64,21 +64,41 @@ int32_t INA236_read_bus_voltage() {
 
 uint gpiojunk;
 uint slicejunk;
+#define DATALOGGING_BUFF_SIZE 2*W25_PAGE_SIZE
+#define DATALOGGING_N_SOURCES 2
 uint16_t *datalogging_buff;
-W25_filesystem_t datalogging_fs;
+#define DATALOGGING_BASE_ADDR_TEMPORARY 0xB000
+uint16_t datalogging_pages_written = 0;
+
+uint8_t dl_tst_msg[256] = {1,2,3,4,5,6,5,4,3,2,1};
+
+
 
 void datalogger_irq() {
-    static int n = 0;
     static int first = 1;
 
-    datalogging_buff[n] = T_glob;
-    n = (n+1)&0xFF; //256-size buffer
+    /*
+     * populate the buffer with interleaved data.
+     *
+     * The number of sources of data dictates how quickly this happens. With two sources,
+     * no data is lost. For three sources, divisibility dictates that we should be more careful.
+     *
+     */
+    static int data_i = 0;
 
-    if(!(n&0x7F) && !first) {
-        uint32_t addr = W25_FS_PAGE_OFFSET<<8;
-        W25_Clear_Sector_Blocking(addr);
-        printf("addr: %08X\n",addr);
-        W25_Program_Page_Blocking(addr, (uint8_t *)(&datalogging_buff[128-n]), 256);
+    datalogging_buff[data_i++] = 0xAA00 + data_i;
+    datalogging_buff[data_i++] = 0x0B + data_i;
+
+    // TODO WARNING: if you change the number of data sources you will lose data and alignment!! Fix this.
+    // uint16_t is four bytes.
+    if((data_i * 4) >= (W25_PAGE_SIZE-50)) {
+        //uint8_t *dl_tx_buff = (uint8_t *)datalogging_buff;
+        uint32_t waddr = DATALOGGING_BASE_ADDR_TEMPORARY | (datalogging_pages_written<<8);
+        printf("programming at address: 0x%08X...\t\t",waddr);
+        W25_Program_Page_Blocking(waddr, dl_tst_msg, 11);
+        printf("page write %d\n",datalogging_pages_written);
+        datalogging_pages_written+=1;
+        data_i = 0;
     }
 
     if(first) {printf("DATALOGGING!!\n");}
@@ -447,14 +467,12 @@ int main(void) {
     uint8_t rx_buff[256];
     char mydata[] = "Hello Crapstone!\0\0\0\0\0\0\0\0";
 
-    datalogging_buff = (uint16_t *)malloc(sizeof(uint16_t)*256);
+    datalogging_buff = (uint16_t *)malloc(sizeof(uint16_t)*DATALOGGING_BUFF_SIZE);
     if(datalogging_buff == NULL) {
         sleep_ms(5000);
         printf("BAD MALLOC\n");
         return -1;
     }
-    datalogging_fs.n_pages_read = 0;
-    datalogging_fs.n_pages_written = 0;
 
     char ui = 0;
     int ict_latch = 0;
@@ -463,7 +481,6 @@ int main(void) {
     int D1_thresh = 10;
     int D1_thresh_setting_multiplier = 2;
     int PI_setpoint = 10;
-
 
     while(1) {
         scanf("%c",&ui);
@@ -492,26 +509,23 @@ int main(void) {
         }
         if(ui == 's') {
             if(ict_latch) {
-                printf("Stop collection to read...\n");
+                printf("[REJECTED] Stop collection to read.\n");
                 continue;
             }
-            //else if(datalogging_fs.n_pages_read >= datalogging_fs.n_pages_written) {
-            //    printf("No more pages written yet...\n");
-            //    continue;
-            //}
-            else {
-                printf("Reading page %d:\n",(datalogging_fs.n_pages_read)&0x3F);
+            printf("Number of pages written: %d\n",datalogging_pages_written);
+            for(int i = 0; i<datalogging_pages_written; i++) {
+                printf("Page %d (0x%08X)\n",i,DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8));
+                for(int i =0 ; i<256; i++) rx_buff[i] = 0;
+                W25_Read_Data(DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8),rx_buff,W25_PAGE_SIZE);
+                uint16_t *rx_data = (uint16_t *)rx_buff;
+                for(int i = 0 ; i< (256/4); i++) {
+                    if(rx_buff[i]==0xFF) printf("ND ");
+                    else printf("%06d ",rx_data[i]);
+                    if(!((i+1)&0xF)) printf("\n");
+                }
+                printf("\n");
             }
-            uint32_t addr = W25_FS_PAGE_OFFSET<<8;
 
-            W25_Read_Data(addr, rx_buff, 256);
-
-            uint16_t *rx_data = (uint16_t *)rx_buff;
-            for(int i = 0 ; i< 128; i++) {
-                printf("%3.3f ",rx_data[i]/8.0);
-                if(!((i+1)&0x7)) printf("\n");
-            }
-            printf("\n");
         }
         if(ui == 'm') {
             if((++D1_thresh_setting_multiplier)>6) D1_thresh_setting_multiplier=1;
@@ -590,24 +604,30 @@ int main(void) {
             multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
             gpiojunk = PWMTOOL_GPIO_PIN;
             slicejunk = pwm_gpio_to_slice_num(gpiojunk);
-//            if(ict_latch) {
-//                sleep_ms(100);
-//                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
-//                pwm_config config = pwm_get_default_config();
-//                // 125MHz / 256 = 488.28kHz,
-//                pwm_config_set_clkdiv_int(&config, 256);
-//                // about 14.9Hz
-//                config.top = 32767;
-//                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
-//                pwm_init(slicejunk, &config, true);
-//                pwm_set_irq_enabled(slicejunk,true);
-//                irq_set_enabled(PWM_IRQ_WRAP,true);
-//            }
-//            else {
-//                pwm_set_irq_enabled(slicejunk,false);
-//                pwm_set_enabled(slicejunk,false);
-//                irq_set_enabled(PWM_IRQ_WRAP,false);
-//            }
+
+            // set up DMA as a "timer" for data logging
+            if(ict_latch) {
+                // TODO: When you implement the FS, get rid of this clear sector.
+                printf("Clearing datalogging sector...");
+                W25_Clear_Sector_Blocking(DATALOGGING_BASE_ADDR_TEMPORARY);
+                printf("\t\tcleared.\n");
+                sleep_ms(100);
+                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
+                pwm_config config = pwm_get_default_config();
+                // 125MHz / 256 = 488.28kHz,
+                pwm_config_set_clkdiv_int(&config, 256);
+                // about 14.9Hz
+                config.top = 32767;
+                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
+                pwm_init(slicejunk, &config, true);
+                pwm_set_irq_enabled(slicejunk,true);
+                irq_set_enabled(PWM_IRQ_WRAP,true);
+            }
+            else {
+                pwm_set_irq_enabled(slicejunk,false);
+                pwm_set_enabled(slicejunk,false);
+                irq_set_enabled(PWM_IRQ_WRAP,false);
+            }
         }
         if(ui == 'j' && !ict_latch) {
             pwm_latch = !pwm_latch;

@@ -12,7 +12,6 @@ set(CMAKE_C_STANDARD 11)
 pico_sdk_init()
 
 # rest of your project
-
 add_executable(capstone_pwm
 	main.c
 	capstone_pwm.c
@@ -20,8 +19,6 @@ add_executable(capstone_pwm
 	capstone_adc.c
 	capstone_w25.c
 )
-
-
 
 target_include_directories(capstone_pwm
     PUBLIC

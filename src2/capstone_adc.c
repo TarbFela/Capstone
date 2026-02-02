@@ -68,6 +68,7 @@ void capstone_adc_init(capstone_adc_struct_t *cas, void (handler_function)(void)
     }
 }
 
+
 void capstone_adc_start(capstone_adc_struct_t *cas) {
     // each DMA should write to half of the buffer.
     dma_channel_configure(cas->adc_dma_daisy_chain[0], &(cas->dma_cfg[0]),
