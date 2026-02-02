@@ -4,7 +4,6 @@
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/spi.h"
-#include "hardware/pwm.h"
 #include "pico/multicore.h"
 #include "../src2/capstone_w25.h"
 
@@ -50,30 +49,6 @@ typedef struct {
 } ulfs_t;
 
 
-#define DATALOGGING_BASE_ADDR_TEMPORARY 0xC000
-int gpiojunk;
-int slicejunk;
-#define PWMTOOL_GPIO_PIN 7
-#define DATALOGGER_BUFF_SIZE 128
-uint32_t datalogger_pages_i = 0;
-
-
-
-uint8_t *datalogger_buff;
-volatile uint8_t *datalogger_r, *datalogger_w;
-
-
-void datalogger_irq(void) {
-    static int i = 0;
-    //if(((i+1)&0xF) == 0) printf("\n");
-    //queue_try_add(datalogger_buff_queue,&(i));
-    *datalogger_w = (uint8_t)i;
-    if((++datalogger_w - datalogger_buff) >= DATALOGGER_BUFF_SIZE) datalogger_w = datalogger_buff;
-    i++;
-
-    pwm_clear_irq(slicejunk);
-}
-
 int main() {
     stdio_init_all();
     W25_Init();
@@ -116,77 +91,64 @@ int main() {
     ulfs_t my_fs;
     memset(&my_fs, 0, sizeof(my_fs));
 
-    printf("Clearing datalogging sector...");
-    W25_Clear_Sector_Blocking(DATALOGGING_BASE_ADDR_TEMPORARY);
-    printf("\t\tcleared.\n");
-    sleep_ms(100);
-
-    datalogger_buff = (uint8_t *)malloc(sizeof(uint8_t) * DATALOGGER_BUFF_SIZE);
-    datalogger_r = datalogger_buff;
-    datalogger_w = datalogger_buff;
-
-    gpiojunk = PWMTOOL_GPIO_PIN;
-    slicejunk = pwm_gpio_to_slice_num(gpiojunk);
-    pwm_config config = pwm_get_default_config();
-    // 125MHz / 256 = 488.28kHz,
-    pwm_config_set_clkdiv_int(&config, 256);
-    // about 14.9Hz
-    config.top = 32767;
-    irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
-    pwm_init(slicejunk, &config, true);
-    pwm_set_irq_enabled(slicejunk,true);
-    irq_set_enabled(PWM_IRQ_WRAP,true);
-
-    printf("Press h to stop 'datalogging'\n");
-    ui[0] = 0;
+//    data[0] = 0;
+//    my_fs.finfos = (ulfs_finfo_t *)malloc(sizeof(ulfs_finfo_t) * FS_MAX_NUMBER_FILES);
+//    for(int i = 0; i<W25_SECTOR_SIZE; i+=FS_FINFO_SIZE) {
+//        W25_Read_Data(FS_BASE_ADDR+FS_FINFOS_OFFSET+i, (uint8_t *)data, FS_FINFO_SIZE);
+//        if(data[0] == 0xFF) break; // you've run out of files
+//        my_fs.finfos[my_fs.n_files].addr =
+//        my_fs.n_files++;
+//    }
 
     while(1) {
-        if( stdio_getchar_timeout_us(1000) != PICO_ERROR_TIMEOUT) break;
-        if(
-                ((datalogger_r == datalogger_buff) && (datalogger_w>=(datalogger_buff+DATALOGGER_BUFF_SIZE/2)))
-                ||
-                ((datalogger_r != datalogger_buff) && (datalogger_w<(datalogger_buff+DATALOGGER_BUFF_SIZE/2)))
-                ) {
-            printf("write here\t");
-            printf("status: %X\t",W25_Read_Status_1());
-            W25_Write_Enable();
-            printf("status: %X\t",W25_Read_Status_1());
-            W25_Program_Page_Blocking(DATALOGGING_BASE_ADDR_TEMPORARY + datalogger_pages_i*256, (uint8_t *)datalogger_r, DATALOGGER_BUFF_SIZE/2);
-            printf("write done (%d 0x%X)\n",datalogger_pages_i, DATALOGGING_BASE_ADDR_TEMPORARY + datalogger_pages_i*256);
-            datalogger_pages_i++;
-            if(datalogger_r == datalogger_buff) datalogger_r+= DATALOGGER_BUFF_SIZE/2;
-            else datalogger_r = datalogger_buff;
+        printf("Enter an address:\n>> 0x");
+        uint32_t waddr = 0;
+        scanf(" %x",&waddr);
+        printf("You gave: 0x%04X or %d\n",waddr,waddr);
+        printf("Would you like to erase this sector (0x%X)? (y/n)\n",waddr&(~0xFFF));
+        ui[0] = 0;
+        scanf(" %c",(char *)ui);
+        printf("You entered %c (%0xX)\n",ui[0], ui[0]);
+        if(ui[0] == 'y') {
+            printf("Clearing sector...\t\t");
+            W25_Clear_Sector_Blocking(waddr&(~0xFFF));
+            printf("Sector cleared.\n");
         }
+        printf("Enter some data and terminate with a newline:\n>> ");
+        char *uip = &ui[0];
+        ui[0] = 0;
+        while(1) {
+            scanf("%c",uip);
+            printf("%c",*uip);
+            if(*uip == '\n') break;
+            uip++;
+        }
+        int ui_msg_len = uip - &ui[0] - 1;
+        printf("\nYou entered a string with length: %d\n",uip - &ui[0]);
+        printf("writing message to address...\t\t");
+        W25_Program_Page_Blocking(waddr,(uint8_t *)ui, ui_msg_len);
+        printf("write complete\n");
+        printf("status: %d\n",W25_Read_Status_1());
+        printf("Press 'r' to read data, otherwise no read...\n");
+        ui[0] = 0;
+        scanf(" %c", ((char *) ui) );
+        if(ui[0] == 'r') {
+            printf("reading page (0x%X)...\t\t", waddr & (~0xFF));
+            uint8_t rx_buff[256];
+            W25_Read_Data(waddr & (~0xFF), rx_buff, 256);
+            printf("read complete.\n");
+            for (int i = 0; i < 256; i++) printf("%c", rx_buff[i]);
+            printf("\n");
+            for (int i = 0; i < 256; i++) printf("%02X ", rx_buff[i]);
+            printf("\n");
+        }
+        printf("Done. Enter 'q' to quit...\n");
+        ui[0] = 0;
+        scanf(" %c", ((char *) ui) );
+        if(ui[0] == 'q') break;
     }
 
-    pwm_set_enabled(slicejunk,false);
-    pwm_set_irq_enabled(slicejunk,true);
-    irq_set_enabled(PWM_IRQ_WRAP,true);
-
-    printf("\n\nDatalogging finished. Reading out data.\n");
-    uint8_t rx_buff[W25_PAGE_SIZE];
-    printf("Number of pages written: %d\n",datalogger_pages_i);
-    for(int i = 0; i<datalogger_pages_i; i++) {
-        printf("Page %d (0x%08X)\n",i,DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8));
-        for(int i =0 ; i<256; i++) rx_buff[i] = 0;
-        W25_Read_Data(DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8),rx_buff,W25_PAGE_SIZE);
-        for(int i = 0 ; i< (256); i++) {
-            if(rx_buff[i]==0xFF) printf("ND ");
-            else printf("%05d ",rx_buff[i]);
-            if(!((i+1)&0x1F)) printf("\n");
-        }
-        printf("\n");
-    }
-
-    printf("Done. Enter 'q' to quit...\n");
-    ui[0] = 0;
-    scanf(" %c", ((char *) ui) );
-    if(ui[0] == 'q') goto reboot;
-
-
-
-
-reboot:
+    reboot:
     printf("\n\nREBOOT!\n");
     reset_usb_boot(0,0);
 
