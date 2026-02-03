@@ -44,7 +44,7 @@ mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
-volatile uint16_t TSNS_ADC_value_12_bit_avg, ISNS_ADC_value_12_bit_avg = 0;
+volatile uint16_t *TSNS_ADC_value_12_bit_avg, *ISNS_ADC_value_12_bit_avg;
 volatile uint16_t d_glob = 0;
 volatile uint16_t T_glob = 0;
 volatile uint32_t VTCMV_glob = 0;
@@ -62,50 +62,19 @@ int32_t INA236_read_bus_voltage() {
     return ((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]);
 }
 
-uint gpiojunk;
-uint slicejunk;
-#define DATALOGGING_BUFF_SIZE 2*W25_PAGE_SIZE
-#define DATALOGGING_N_SOURCES 2
-uint16_t *datalogging_buff;
-#define DATALOGGING_BASE_ADDR_TEMPORARY 0xB000
-uint16_t datalogging_pages_written = 0;
+#define DATALOGGING_BASE_ADDR 0x11000
+// multicore datalogging signal flag
+#define MC_DL_TRIG 0xBEEF0000
+#define MC_DL_FLAG_MASK 0xFFFF0000
+#define MC_DL_BUFF_I_MASK 0x0000FFFF
+volatile int datalogger_q_w = 0;
+int datalogger_q_r = 0;
+int datalogging_pages_written = 0;
+int datalogging_waddr = DATALOGGING_BASE_ADDR;
 
-uint8_t dl_tst_msg[256] = {1,2,3,4,5,6,5,4,3,2,1};
 
-
-
-void datalogger_irq() {
-    static int first = 1;
-
-    /*
-     * populate the buffer with interleaved data.
-     *
-     * The number of sources of data dictates how quickly this happens. With two sources,
-     * no data is lost. For three sources, divisibility dictates that we should be more careful.
-     *
-     */
-    static int data_i = 0;
-
-    datalogging_buff[data_i++] = 0xAA00 + data_i;
-    datalogging_buff[data_i++] = 0x0B + data_i;
-
-    // TODO WARNING: if you change the number of data sources you will lose data and alignment!! Fix this.
-    // uint16_t is four bytes.
-    if((data_i * 4) >= (W25_PAGE_SIZE-50)) {
-        //uint8_t *dl_tx_buff = (uint8_t *)datalogging_buff;
-        uint32_t waddr = DATALOGGING_BASE_ADDR_TEMPORARY | (datalogging_pages_written<<8);
-        printf("programming at address: 0x%08X...\t\t",waddr);
-        W25_Program_Page_Blocking(waddr, dl_tst_msg, 11);
-        printf("page write %d\n",datalogging_pages_written);
-        datalogging_pages_written+=1;
-        data_i = 0;
-    }
-
-    if(first) {printf("DATALOGGING!!\n");}
-    first = 0;
-    pwm_clear_irq(slicejunk);
-}
 void isns_dma_handler() {
+    static int counter = 0;
     static int d = 100;
     //debugging toggle
     sio_hw->gpio_togl = 0x1<<18;
@@ -124,12 +93,28 @@ void isns_dma_handler() {
 
     int tsns_avg = 0;
     for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) tsns_avg += data[2*i + 1];
-    
+
     // TODO: the current buffer size is 256 with a quarter-size (half per DMA, half per ADC ch) of 64. Divide by 2^6.
-    tsns_avg>>=6;
-    TSNS_ADC_value_12_bit_avg = tsns_avg;
-    isns_avg>>=6;
-    ISNS_ADC_value_12_bit_avg = isns_avg;
+    tsns_avg >>= 6;
+    isns_avg >>= 6;
+
+    // every fourth DSP IRQ should log a "sample" (x2ch)
+    if(((++counter)&0x3) == 0) {
+        TSNS_ADC_value_12_bit_avg[datalogger_q_w] = tsns_avg;
+        ISNS_ADC_value_12_bit_avg[datalogger_q_w] = isns_avg;
+
+        //                                                  DATALOGGING
+        // round-robin buffer/queue
+        // TRIGGER every 64 samples (128 bytes x 2ch = 256bytes = 1 page)
+        // WRAP every 128 samples
+        if ((datalogger_q_w & 63) == 63) {
+            if (multicore_fifo_wready()) {
+                multicore_fifo_push_blocking(MC_DL_TRIG | (MC_DL_BUFF_I_MASK&(datalogger_q_w-63)));
+            }
+        }
+        datalogger_q_w++;
+        datalogger_q_w &= 127;
+    }
 
     // BEST FIT LINE FROM XY PLOT
     // Vin =  -214.2785663 * Vdiff + 2.908868568
@@ -180,154 +165,158 @@ void isns_dma_handler() {
 }
 
 void vtc_offset_sweep() {
-    printf("[RUNNING VTC OFFSET SWEEP]\n");
-    printf("Starting ADC and DMAs...\n");
-
-    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-
-    if(!mutex_try_enter(&current_controller_lock,NULL)) {
-        printf("MUTEX CLAIMED!!!\n");
-        return;
-    }
-
-    current_controller.controller_paused = 1;
-    capstone_adc_start(cas);
-    sleep_ms(100);
-
-    uint16_t i_measurements[256];
-    uint16_t d_measurements[256];
-    int v_measurements[256];
-    int v_meas;
-    uint16_t t_measurements[256];
-    uint16_t i_setpoints[16];
-    int mmi = 0;
-    int ispi = 0;
-
-    // sweep currents
-    for(int i = 63; i<=75; i+=3) {
-        printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
-        current_controller.PI_SP = i;
-        i_setpoints[ispi++] = i;
-
-        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-        v_meas = INA236_read_bus_voltage();
-        if(v_meas < -999) printf("BAD I2C...");
-        else v_measurements[mmi] = v_meas;
-        d_measurements[mmi] = 0;
-        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-
-        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
-        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
-
-        for(int ii = 0; ii<15; ii++) {
-            current_controller.controller_paused = 0; sleep_ms(900);
-            current_controller.controller_paused = 1; sleep_ms(100);
-
-            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-            v_meas = INA236_read_bus_voltage();
-            if (v_meas < -999) printf("BAD I2C...");
-            else v_measurements[mmi] = v_meas;
-            d_measurements[mmi] = d_glob;
-            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-        }
-
-        current_controller.controller_paused = 1;
-        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-
-        for(int ii = 0; ii<5; ii++) {
-            sleep_ms(1000);
-
-            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-            v_meas = INA236_read_bus_voltage();
-            if (v_meas < -999) printf("BAD I2C...");
-            else v_measurements[mmi] = v_meas;
-            d_measurements[mmi] = 0;
-            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-        }
-        sleep_ms(500);
-    }
-
-    capstone_adc_stop(cas);
-    mutex_exit(&current_controller_lock);
-
-    int mmi_ispi_ratio = (mmi+1)/(ispi+1);
-    ;
-    while(ispi--) {
-        printf("%d,\n",i_setpoints[ispi]);
-        for(int ii = 0; ii<21; ii++) {
-            printf("\t ,%d, %d, %d, %d,\n",i_measurements[--mmi],t_measurements[mmi],d_measurements[mmi],v_measurements[mmi]);
-        }
-    }
+    return;
+//    printf("[RUNNING VTC OFFSET SWEEP]\n");
+//    printf("Starting ADC and DMAs...\n");
+//
+//    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+//
+//    if(!mutex_try_enter(&current_controller_lock,NULL)) {
+//        printf("MUTEX CLAIMED!!!\n");
+//        return;
+//    }
+//
+//    current_controller.controller_paused = 1;
+//    capstone_adc_start(cas);
+//    sleep_ms(100);
+//
+//    uint16_t i_measurements[256];
+//    uint16_t d_measurements[256];
+//    int v_measurements[256];
+//    int v_meas;
+//    uint16_t t_measurements[256];
+//    uint16_t i_setpoints[16];
+//    int mmi = 0;
+//    int ispi = 0;
+//
+//    // sweep currents
+//    for(int i = 63; i<=75; i+=3) {
+//        printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
+//        current_controller.PI_SP = i;
+//        i_setpoints[ispi++] = i;
+//
+//        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+//        v_meas = INA236_read_bus_voltage();
+//        if(v_meas < -999) printf("BAD I2C...");
+//        else v_measurements[mmi] = v_meas;
+//        d_measurements[mmi] = 0;
+//        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+//
+//        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
+//        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
+//        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
+//        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+//
+//        for(int ii = 0; ii<15; ii++) {
+//            current_controller.controller_paused = 0; sleep_ms(900);
+//            current_controller.controller_paused = 1; sleep_ms(100);
+//
+//            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+//            v_meas = INA236_read_bus_voltage();
+//            if (v_meas < -999) printf("BAD I2C...");
+//            else v_measurements[mmi] = v_meas;
+//            d_measurements[mmi] = d_glob;
+//            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+//        }
+//
+//        current_controller.controller_paused = 1;
+//        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+//        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+//        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+//        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+//
+//        for(int ii = 0; ii<5; ii++) {
+//            sleep_ms(1000);
+//
+//            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
+//            v_meas = INA236_read_bus_voltage();
+//            if (v_meas < -999) printf("BAD I2C...");
+//            else v_measurements[mmi] = v_meas;
+//            d_measurements[mmi] = 0;
+//            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
+//        }
+//        sleep_ms(500);
+//    }
+//
+//    capstone_adc_stop(cas);
+//    mutex_exit(&current_controller_lock);
+//
+//    int mmi_ispi_ratio = (mmi+1)/(ispi+1);
+//    ;
+//    while(ispi--) {
+//        printf("%d,\n",i_setpoints[ispi]);
+//        for(int ii = 0; ii<21; ii++) {
+//            printf("\t ,%d, %d, %d, %d,\n",i_measurements[--mmi],t_measurements[mmi],d_measurements[mmi],v_measurements[mmi]);
+//        }
+//    }
 
 
 }
 
 void network_analyzer_slave_adc_handler(void) {
-    //static uint8_t i = 0;
-    uint8_t val = adc_fifo_get() + 100;
-    // since the ADC is shifting down to 8 bits, we have a 256 FSR
-    // that gives us a nice, 100–356 range. That works well!
-    pwm_set_gpio_level(PWM1_GPIO_PIN,val);
-    pwm_set_gpio_level(PWM3_GPIO_PIN, val);
-    adc_fifo_drain();
+    return;
+//    //static uint8_t i = 0;
+//    uint8_t val = adc_fifo_get() + 100;
+//    // since the ADC is shifting down to 8 bits, we have a 256 FSR
+//    // that gives us a nice, 100–356 range. That works well!
+//    pwm_set_gpio_level(PWM1_GPIO_PIN,val);
+//    pwm_set_gpio_level(PWM3_GPIO_PIN, val);
+//    adc_fifo_drain();
 }
 
 // override the CAS with our own ADC to PWM handler.
 void network_analyzer_slave_start() {
-    printf("Initializing Network Analyzer Mode...\n");
-    adc_init();
-    adc_run(false);
-    adc_gpio_init(NA_ADC_PIN);
-    adc_select_input(NA_ADC_PIN-26);
-    adc_fifo_setup(
-            true,    // Write each completed conversion to the sample FIFO
-            false,    // Enable DMA data request
-            1,       // DREQ (and IRQ) asserted when at least 1 sample present
-            false,   // We won't see the ERR bit because of 8 bit reads; disable.
-            true     // Shift each sample to 8 bits when pushing to FIFO?
-    );
-    adc_irq_set_enabled(true);
-
-    irq_set_exclusive_handler(ADC_IRQ_FIFO,network_analyzer_slave_adc_handler);
-    irq_set_enabled(ADC_IRQ_FIFO, true);
-
-    // no round-robin
-    adc_set_round_robin(0);
-    // our PWM is 125kHz, so our ADC should be 125kHz? sure. 48MHz / 125kHz = 384
-    adc_set_clkdiv(192);
-    printf("Starting PWM Outputs...\n");
-
-    pwm_set_gpio_level(PWM1_GPIO_PIN,100);
-    pwm_set_gpio_level(PWM2_GPIO_PIN,100);
-    pwm_set_gpio_level(PWM3_GPIO_PIN,100);
-    pwm_set_gpio_level(PWM4_GPIO_PIN,100);
-
-    sleep_ms(1000);
-
-    adc_run(true);
-    printf("ADC Started.\n");
+    return;
+//    printf("Initializing Network Analyzer Mode...\n");
+//    adc_init();
+//    adc_run(false);
+//    adc_gpio_init(NA_ADC_PIN);
+//    adc_select_input(NA_ADC_PIN-26);
+//    adc_fifo_setup(
+//            true,    // Write each completed conversion to the sample FIFO
+//            false,    // Enable DMA data request
+//            1,       // DREQ (and IRQ) asserted when at least 1 sample present
+//            false,   // We won't see the ERR bit because of 8 bit reads; disable.
+//            true     // Shift each sample to 8 bits when pushing to FIFO?
+//    );
+//    adc_irq_set_enabled(true);
+//
+//    irq_set_exclusive_handler(ADC_IRQ_FIFO,network_analyzer_slave_adc_handler);
+//    irq_set_enabled(ADC_IRQ_FIFO, true);
+//
+//    // no round-robin
+//    adc_set_round_robin(0);
+//    // our PWM is 125kHz, so our ADC should be 125kHz? sure. 48MHz / 125kHz = 384
+//    adc_set_clkdiv(192);
+//    printf("Starting PWM Outputs...\n");
+//
+//    pwm_set_gpio_level(PWM1_GPIO_PIN,100);
+//    pwm_set_gpio_level(PWM2_GPIO_PIN,100);
+//    pwm_set_gpio_level(PWM3_GPIO_PIN,100);
+//    pwm_set_gpio_level(PWM4_GPIO_PIN,100);
+//
+//    sleep_ms(1000);
+//
+//    adc_run(true);
+//    printf("ADC Started.\n");
 }
 
 // stops the network analyzer program and re-inits the CAS.
 void network_analyzer_slave_stop() {
-    printf("Stopping NA mode...\n");
-    adc_run(false);
-    adc_fifo_drain();
-    irq_set_enabled(ADC_IRQ_FIFO,false);
-    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-    capstone_adc_init(cas, isns_dma_handler);
-    printf("NA mode exited.\n");
+    return;
+//    printf("Stopping NA mode...\n");
+//    adc_run(false);
+//    adc_fifo_drain();
+//    irq_set_enabled(ADC_IRQ_FIFO,false);
+//    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
+//    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
+//    capstone_adc_init(cas, isns_dma_handler);
+//    printf("NA mode exited.\n");
 }
 
 void other_core() {
@@ -464,14 +453,14 @@ int main(void) {
     gpio_pull_up(PMIC_I2C_SCL_PIN);
 
     W25_Init();
-    uint8_t rx_buff[256];
-    char mydata[] = "Hello Crapstone!\0\0\0\0\0\0\0\0";
 
-    datalogging_buff = (uint16_t *)malloc(sizeof(uint16_t)*DATALOGGING_BUFF_SIZE);
-    if(datalogging_buff == NULL) {
-        sleep_ms(5000);
-        printf("BAD MALLOC\n");
-        return -1;
+    TSNS_ADC_value_12_bit_avg = (uint16_t *)malloc(sizeof(uint16_t) * 256);
+    ISNS_ADC_value_12_bit_avg = (uint16_t *)malloc(sizeof(uint16_t) * 256);
+
+    if(TSNS_ADC_value_12_bit_avg == NULL || ISNS_ADC_value_12_bit_avg == NULL) {
+        sleep_ms(10000);
+        printf("BAD MALLOC ON DLBUFFS\n");
+        goto reboot;
     }
 
     char ui = 0;
@@ -483,168 +472,176 @@ int main(void) {
     int PI_setpoint = 10;
 
     while(1) {
-        scanf("%c",&ui);
-        // QUIT
-        if(ui=='q') break;
-        // HELP MENU
-        if(ui == 'h') {
-            printf("\t\t[HELP MENU]\n"
-                   "s: read Flash\n"
-                   "m: change multiplier\n"
-                   "0-9: set target current or pwm\n"
-                   "p & l: inc/dec target current\n"
-                   "i: test INA236 writing\n"
-                   "u: dep\n"
-                   "v: read INA236 bus voltage\n"
-                   "space: start/stop PWM output\n"
-                   "k: start/stop PI control\n"
-                   "g: use with network analyzer\n"
-                   "c: perform voffset sweep (dep)\n"
-                   "t: read out temperature conversion\n"
-                   "j: direct PWM control\n"
-                   "r: read raw ISNS ADC value (PWM mode)\n"
-                   "spacebar: current controller\n"
-                   "\n\n"
-                   );
-        }
-        if(ui == 's') {
-            if(ict_latch) {
-                printf("[REJECTED] Stop collection to read.\n");
-                continue;
+        int uii = stdio_getchar_timeout_us(100);
+        if(uii != PICO_ERROR_TIMEOUT) {
+            ui = (char)uii;
+            // QUIT
+            if (ui == 'q') break;
+            // HELP MENU
+            if (ui == 'h') {
+                printf("\t\t[HELP MENU]\n"
+                       "s: read Flash\n"
+                       "m: change multiplier\n"
+                       "0-9: set target current or pwm\n"
+                       "p & l: inc/dec target current\n"
+                       "i: test INA236 writing\n"
+                       "u: dep\n"
+                       "v: read INA236 bus voltage\n"
+                       "space: start/stop PWM output\n"
+                       "k: start/stop PI control\n"
+                       "g: use with network analyzer\n"
+                       "c: perform voffset sweep (dep)\n"
+                       "t: read out temperature conversion\n"
+                       "j: direct PWM control\n"
+                       "r: read raw ISNS ADC value (PWM mode)\n"
+                       "spacebar: current controller\n"
+                       "\n\n"
+                );
             }
-            printf("Number of pages written: %d\n",datalogging_pages_written);
-            for(int i = 0; i<datalogging_pages_written; i++) {
-                printf("Page %d (0x%08X)\n",i,DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8));
-                for(int i =0 ; i<256; i++) rx_buff[i] = 0;
-                W25_Read_Data(DATALOGGING_BASE_ADDR_TEMPORARY | (i<<8),rx_buff,W25_PAGE_SIZE);
-                uint16_t *rx_data = (uint16_t *)rx_buff;
-                for(int i = 0 ; i< (256/4); i++) {
-                    if(rx_buff[i]==0xFF) printf("ND ");
-                    else printf("%06d ",rx_data[i]);
-                    if(!((i+1)&0xF)) printf("\n");
+            if (ui == 's') {
+                if (ict_latch) {
+                    printf("[REJECTED] Stop collection to read.\n");
+                    continue;
                 }
-                printf("\n");
-            }
+                //round up
+                datalogging_pages_written = (datalogging_waddr-DATALOGGING_BASE_ADDR+W25_PAGE_SIZE-1)/256;
+                printf("Number of pages written: %d\n", datalogging_pages_written);
+                uint8_t *rx_buff = (uint8_t *) malloc(sizeof(uint8_t) * 256);
+                if(rx_buff == NULL) {
+                    printf("MALLOC FAILED!!\n\n");
+                    goto reboot;
+                }
+                for (int i = 0; i < datalogging_pages_written; i++) {
+                    printf("Page %d (0x%08X)\n", i, DATALOGGING_BASE_ADDR | (i << 8));
+                    for (int i = 0; i < 256; i++) rx_buff[i] = 0;
+                    W25_Read_Data(DATALOGGING_BASE_ADDR | (i << 8), rx_buff, W25_PAGE_SIZE);
+                    uint16_t *rx_data = (uint16_t *) rx_buff;
+                    for (int i = 0; i < W25_PAGE_SIZE/2; i++) {
+                        if (rx_data[i] == 0xFFFF) printf("ND ");
+                        else printf("%04X ", rx_data[i]);
+                        if (!((i + 1) & 0xF)) printf("\n");
+                    }
+                    printf("\n");
+                }
+                free(rx_buff);
 
-        }
-        if(ui == 'm') {
-            if((++D1_thresh_setting_multiplier)>6) D1_thresh_setting_multiplier=1;
-            printf("MULTIPLIER SET TO %d\n",D1_thresh_setting_multiplier);
-        }
-        if(ui >= '0' && ui <= '9') {
-            if(pwm_latch) {
-                // push the int value entered from 0 to 9
-                multicore_fifo_push_blocking((uint32_t)(ui) - '0');
-                continue;
             }
-            PI_setpoint = 4*((uint16_t)ui - '0')*D1_thresh_setting_multiplier;
-            printf("PI setpoint: %.3fA\n",PI_setpoint/8.0);
-            if(ict_latch) {
-                multicore_fifo_push_blocking(PI_setpoint);
+            if (ui == 'm') {
+                if ((++D1_thresh_setting_multiplier) > 6) D1_thresh_setting_multiplier = 1;
+                printf("MULTIPLIER SET TO %d\n", D1_thresh_setting_multiplier);
             }
-        }
-        if(ui == 'p' || ui == 'l') {
-            if(ict_latch) {
-                if (ui == 'p') PI_setpoint += D1_thresh_setting_multiplier / 2;
-                if (ui == 'l') PI_setpoint += -D1_thresh_setting_multiplier / 2;
+            if (ui >= '0' && ui <= '9') {
+                if (pwm_latch) {
+                    // push the int value entered from 0 to 9
+                    multicore_fifo_push_blocking((uint32_t) (ui) - '0');
+                    continue;
+                }
+                PI_setpoint = 4 * ((uint16_t) ui - '0') * D1_thresh_setting_multiplier;
                 printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
                 if (ict_latch) {
                     multicore_fifo_push_blocking(PI_setpoint);
                 }
             }
-            else if (pwm_latch) {
-                if(ui == 'p') multicore_fifo_push_blocking(UI_SIG_PWM_INC);
-                if(ui == 'l') multicore_fifo_push_blocking(UI_SIG_PWM_DEC);
+            if (ui == 'p' || ui == 'l') {
+                if (ict_latch) {
+                    if (ui == 'p') PI_setpoint += D1_thresh_setting_multiplier / 2;
+                    if (ui == 'l') PI_setpoint += -D1_thresh_setting_multiplier / 2;
+                    printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
+                    if (ict_latch) {
+                        multicore_fifo_push_blocking(PI_setpoint);
+                    }
+                } else if (pwm_latch) {
+                    if (ui == 'p') multicore_fifo_push_blocking(UI_SIG_PWM_INC);
+                    if (ui == 'l') multicore_fifo_push_blocking(UI_SIG_PWM_DEC);
+                }
+            }
+            if (ui == 'i') {
+                printf("Writing to INA236...\n");
+                uint8_t INA236B_msg[3] = {7, 0xAB, 0xCD};
+                uint8_t *INA236_read_dst;
+                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
+                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
+                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
+                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
+
+                // 4127h
+                INA236B_msg[0] = 0; //config reg
+                INA236B_msg[1] = 0x41 | 0x1 << 4; // default config MSbyte with shunt ADC range set to 20.48mV
+                INA236B_msg[2] = 0x27; // default config LSbyte
+
+                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
+
+                free(INA236_read_dst);
+            }
+            if (ui == 'u') {
+                printf("Reading INA236 Shunt Voltage...\n");
+                uint8_t INA236B_msg[1] = {0x1};
+                uint8_t *INA236_read_dst;
+                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
+                int16_t *INA236_ADC_val = (uint16_t *) INA236_read_dst;
+                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
+                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
+                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
+                printf("ADC value: %d\n", *INA236_ADC_val);
+                free(INA236_read_dst);
+            }
+            if (ui == 'v') {
+                printf("Reading INA236 Bus Voltage...\n");
+                uint8_t INA236B_msg[1] = {0x2};
+                uint8_t *INA236_read_dst;
+                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
+
+                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
+                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
+                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
+                printf("ADC value: %d\n", ((int16_t) INA236_read_dst[0] << 8) | ((int16_t) INA236_read_dst[1]));
+                free(INA236_read_dst);
+            }
+            if (ui == ' ' && !pwm_latch) {
+                ict_latch = !ict_latch;
+                multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
+            }
+            if (ui == 'j' && !ict_latch) {
+                pwm_latch = !pwm_latch;
+                multicore_fifo_push_blocking(UI_SIG_PWM_START_STOP);
+            }
+            if (ui == 'r' && pwm_latch) multicore_fifo_push_blocking(UI_SIG_PWM_READ_ISNS);
+            if (ui == 'k' && ict_latch) {
+                multicore_fifo_push_blocking(UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE);
+            }
+            if (ui == 'g') {
+                multicore_fifo_push_blocking(UI_SIG_NA_START_STOP);
+            }
+            if (ui == 'c') {
+                //multicore_fifo_push_blocking(0xDEAD);
+            }
+            if (ui == 't') {
+                printf("Temp: %.3f\tADC: %d\tVtc_mv: %d\n", T_glob / 8.0, TSNS_ADC_value_12_bit_avg[0], VTCMV_glob);
             }
         }
-        if(ui == 'i') {
-            printf("Writing to INA236...\n");
-            uint8_t INA236B_msg[3] = {7,0xAB,0xCD};
-            uint8_t *INA236_read_dst;
-            INA236_read_dst = (uint8_t *)malloc(sizeof(uint8_t) * 2);
-            i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
-            i2c_read_timeout_us(i2c0,0x48,INA236_read_dst,2,0,1000000);
-            printf("Read values: 0x%02X%02X\n",INA236_read_dst[0],INA236_read_dst[1]);
+        else if (multicore_fifo_rvalid()) {
+            int mcdlsig = multicore_fifo_pop_blocking();
+            if ((mcdlsig & MC_DL_FLAG_MASK )== MC_DL_TRIG) {
+                if((datalogging_waddr&0xFFF) == 0) {
+                    printf("clearing sector...");
+                    W25_Clear_Sector_Blocking(datalogging_waddr);
+                    printf("\t\tclear done (status %d)\n",W25_Read_Status_1());
+                }
 
-            // 4127h
-            INA236B_msg[0] = 0; //config reg
-            INA236B_msg[1] = 0x41 | 0x1<<4; // default config MSbyte with shunt ADC range set to 20.48mV
-            INA236B_msg[2] = 0x27; // default config LSbyte
+                datalogger_q_r = mcdlsig & MC_DL_BUFF_I_MASK;
+                printf("cursor at %d\n",datalogger_q_r);
 
-            i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
+                printf("writing ISNS data [0x%08X]...",datalogging_waddr);
+                W25_Program_Page_Blocking(datalogging_waddr,(uint8_t *)&ISNS_ADC_value_12_bit_avg[datalogger_q_r],128);
+                printf("\t\twrite done (status %d)\n",W25_Read_Status_1());
+                datalogging_waddr += 128;
 
-            free(INA236_read_dst);
-        }
-        if(ui == 'u') {
-            printf("Reading INA236 Shunt Voltage...\n");
-            uint8_t INA236B_msg[1] = {0x1};
-            uint8_t *INA236_read_dst;
-            INA236_read_dst = (uint8_t *)malloc(sizeof(uint8_t) * 2);
-            int16_t *INA236_ADC_val = (uint16_t *)INA236_read_dst;
-            i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
-            i2c_read_timeout_us(i2c0,0x48,INA236_read_dst,2,0,1000000);
-            printf("Read values: 0x%02X%02X\n",INA236_read_dst[0],INA236_read_dst[1]);
-            printf("ADC value: %d\n",*INA236_ADC_val);
-            free(INA236_read_dst);
-        }
-        if(ui == 'v') {
-            printf("Reading INA236 Bus Voltage...\n");
-            uint8_t INA236B_msg[1] = {0x2};
-            uint8_t *INA236_read_dst;
-            INA236_read_dst = (uint8_t *)malloc(sizeof(uint8_t) * 2);
 
-            i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
-            i2c_read_timeout_us(i2c0,0x48,INA236_read_dst,2,0,1000000);
-            printf("Read values: 0x%02X%02X\n",INA236_read_dst[0],INA236_read_dst[1]);
-            printf("ADC value: %d\n",((int16_t)INA236_read_dst[0] << 8) | ((int16_t)INA236_read_dst[1]));
-            free(INA236_read_dst);
-        }
-        if(ui == ' ' && !pwm_latch) {
-            ict_latch = !ict_latch;
-            multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
-            gpiojunk = PWMTOOL_GPIO_PIN;
-            slicejunk = pwm_gpio_to_slice_num(gpiojunk);
-
-            // set up DMA as a "timer" for data logging
-            if(ict_latch) {
-                // TODO: When you implement the FS, get rid of this clear sector.
-                printf("Clearing datalogging sector...");
-                W25_Clear_Sector_Blocking(DATALOGGING_BASE_ADDR_TEMPORARY);
-                printf("\t\tcleared.\n");
-                sleep_ms(100);
-                uint chan_num4 = pwm_gpio_to_channel(gpiojunk);
-                pwm_config config = pwm_get_default_config();
-                // 125MHz / 256 = 488.28kHz,
-                pwm_config_set_clkdiv_int(&config, 256);
-                // about 14.9Hz
-                config.top = 32767;
-                irq_set_exclusive_handler(PWM_IRQ_WRAP,datalogger_irq);
-                pwm_init(slicejunk, &config, true);
-                pwm_set_irq_enabled(slicejunk,true);
-                irq_set_enabled(PWM_IRQ_WRAP,true);
+                printf("writing TSNS data [0x%08X]...",datalogging_waddr);
+                W25_Program_Page_Blocking(datalogging_waddr,(uint8_t *)&TSNS_ADC_value_12_bit_avg[datalogger_q_r],128);
+                printf("\t\twrite done (status %d)\n",W25_Read_Status_1());
+                datalogging_waddr += 128;
             }
-            else {
-                pwm_set_irq_enabled(slicejunk,false);
-                pwm_set_enabled(slicejunk,false);
-                irq_set_enabled(PWM_IRQ_WRAP,false);
-            }
-        }
-        if(ui == 'j' && !ict_latch) {
-            pwm_latch = !pwm_latch;
-            multicore_fifo_push_blocking(UI_SIG_PWM_START_STOP);
-        }
-        if(ui == 'r' && pwm_latch) multicore_fifo_push_blocking(UI_SIG_PWM_READ_ISNS);
-        if(ui == 'k' && ict_latch) {
-            multicore_fifo_push_blocking(UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE);
-        }
-        if(ui == 'g') {
-            multicore_fifo_push_blocking(UI_SIG_NA_START_STOP);
-        }
-        if(ui == 'c') {
-            //multicore_fifo_push_blocking(0xDEAD);
-        }
-        if(ui == 't') {
-            printf("Temp: %.3f\tADC: %d\tVtc_mv: %d\n",T_glob/8.0, TSNS_ADC_value_12_bit_avg, VTCMV_glob);
         }
     }
 
