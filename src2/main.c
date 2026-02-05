@@ -21,6 +21,7 @@
 #include "capstone_adc.h"
 #include "capstone_thermocouple.h"
 #include "capstone_w25.h"
+#include "capstone_measurement_routines.h"
 
 
 #define PMIC_I2C_SDA_PIN 8
@@ -44,8 +45,7 @@ mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
-volatile uint16_t *TSNS_ADC_value_12_bit_avg, *ISNS_ADC_value_12_bit_avg;
-volatile uint16_t d_glob = 0;
+volatile uint16_t *TSNS_ADC_value_12_bit_avg, *ISNS_ADC_value_12_bit_avg, *dutycycle_datalog;
 volatile uint16_t T_glob = 0;
 volatile uint32_t VTCMV_glob = 0;
 
@@ -102,10 +102,10 @@ void isns_dma_handler() {
     if(((++counter)&0x3) == 0) {
         TSNS_ADC_value_12_bit_avg[datalogger_q_w] = tsns_avg;
         ISNS_ADC_value_12_bit_avg[datalogger_q_w] = isns_avg;
-
+        dutycycle_datalog[datalogger_q_w] = d;
         //                                                  DATALOGGING
         // round-robin buffer/queue
-        // TRIGGER every 64 samples (128 bytes x 2ch = 256bytes = 1 page)
+        // TRIGGER every 64 samples (128 bytes x 3ch = 384bytes = 1.5 pages)
         // WRAP every 128 samples
         if ((datalogger_q_w & 63) == 63) {
             if (multicore_fifo_wready()) {
@@ -153,170 +153,12 @@ void isns_dma_handler() {
         pwm_set_gpio_level(PWM2_GPIO_PIN,d);
         pwm_set_gpio_level(PWM4_GPIO_PIN,d);
     }
-    else {
-        d_glob = d;
-    }
 
 
     // clear the correct interrupt
     dma_hw->ints0 = 0x1 << cas->adc_dma_daisy_chain[culprit_dma_daisy_chain_index];
     // debugging toggler
     sio_hw->gpio_togl = 0x1<<18;
-}
-
-void vtc_offset_sweep() {
-    return;
-//    printf("[RUNNING VTC OFFSET SWEEP]\n");
-//    printf("Starting ADC and DMAs...\n");
-//
-//    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-//
-//    if(!mutex_try_enter(&current_controller_lock,NULL)) {
-//        printf("MUTEX CLAIMED!!!\n");
-//        return;
-//    }
-//
-//    current_controller.controller_paused = 1;
-//    capstone_adc_start(cas);
-//    sleep_ms(100);
-//
-//    uint16_t i_measurements[256];
-//    uint16_t d_measurements[256];
-//    int v_measurements[256];
-//    int v_meas;
-//    uint16_t t_measurements[256];
-//    uint16_t i_setpoints[16];
-//    int mmi = 0;
-//    int ispi = 0;
-//
-//    // sweep currents
-//    for(int i = 63; i<=75; i+=3) {
-//        printf("SWEEP LEVEL %.2f [%d]...\n",i/4.0,i);
-//        current_controller.PI_SP = i;
-//        i_setpoints[ispi++] = i;
-//
-//        t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-//        v_meas = INA236_read_bus_voltage();
-//        if(v_meas < -999) printf("BAD I2C...");
-//        else v_measurements[mmi] = v_meas;
-//        d_measurements[mmi] = 0;
-//        i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-//
-//        pwm_set_gpio_level(PWM1_GPIO_PIN,100);
-//        pwm_set_gpio_level(PWM2_GPIO_PIN,100);
-//        pwm_set_gpio_level(PWM3_GPIO_PIN,100);
-//        pwm_set_gpio_level(PWM4_GPIO_PIN,100);
-//
-//        for(int ii = 0; ii<15; ii++) {
-//            current_controller.controller_paused = 0; sleep_ms(900);
-//            current_controller.controller_paused = 1; sleep_ms(100);
-//
-//            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-//            v_meas = INA236_read_bus_voltage();
-//            if (v_meas < -999) printf("BAD I2C...");
-//            else v_measurements[mmi] = v_meas;
-//            d_measurements[mmi] = d_glob;
-//            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-//        }
-//
-//        current_controller.controller_paused = 1;
-//        pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-//        pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-//        pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-//        pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-//
-//        for(int ii = 0; ii<5; ii++) {
-//            sleep_ms(1000);
-//
-//            t_measurements[mmi] = TSNS_ADC_value_12_bit_avg;
-//            v_meas = INA236_read_bus_voltage();
-//            if (v_meas < -999) printf("BAD I2C...");
-//            else v_measurements[mmi] = v_meas;
-//            d_measurements[mmi] = 0;
-//            i_measurements[mmi++] = ISNS_ADC_value_12_bit_avg;
-//        }
-//        sleep_ms(500);
-//    }
-//
-//    capstone_adc_stop(cas);
-//    mutex_exit(&current_controller_lock);
-//
-//    int mmi_ispi_ratio = (mmi+1)/(ispi+1);
-//    ;
-//    while(ispi--) {
-//        printf("%d,\n",i_setpoints[ispi]);
-//        for(int ii = 0; ii<21; ii++) {
-//            printf("\t ,%d, %d, %d, %d,\n",i_measurements[--mmi],t_measurements[mmi],d_measurements[mmi],v_measurements[mmi]);
-//        }
-//    }
-
-
-}
-
-void network_analyzer_slave_adc_handler(void) {
-    return;
-//    //static uint8_t i = 0;
-//    uint8_t val = adc_fifo_get() + 100;
-//    // since the ADC is shifting down to 8 bits, we have a 256 FSR
-//    // that gives us a nice, 100–356 range. That works well!
-//    pwm_set_gpio_level(PWM1_GPIO_PIN,val);
-//    pwm_set_gpio_level(PWM3_GPIO_PIN, val);
-//    adc_fifo_drain();
-}
-
-// override the CAS with our own ADC to PWM handler.
-void network_analyzer_slave_start() {
-    return;
-//    printf("Initializing Network Analyzer Mode...\n");
-//    adc_init();
-//    adc_run(false);
-//    adc_gpio_init(NA_ADC_PIN);
-//    adc_select_input(NA_ADC_PIN-26);
-//    adc_fifo_setup(
-//            true,    // Write each completed conversion to the sample FIFO
-//            false,    // Enable DMA data request
-//            1,       // DREQ (and IRQ) asserted when at least 1 sample present
-//            false,   // We won't see the ERR bit because of 8 bit reads; disable.
-//            true     // Shift each sample to 8 bits when pushing to FIFO?
-//    );
-//    adc_irq_set_enabled(true);
-//
-//    irq_set_exclusive_handler(ADC_IRQ_FIFO,network_analyzer_slave_adc_handler);
-//    irq_set_enabled(ADC_IRQ_FIFO, true);
-//
-//    // no round-robin
-//    adc_set_round_robin(0);
-//    // our PWM is 125kHz, so our ADC should be 125kHz? sure. 48MHz / 125kHz = 384
-//    adc_set_clkdiv(192);
-//    printf("Starting PWM Outputs...\n");
-//
-//    pwm_set_gpio_level(PWM1_GPIO_PIN,100);
-//    pwm_set_gpio_level(PWM2_GPIO_PIN,100);
-//    pwm_set_gpio_level(PWM3_GPIO_PIN,100);
-//    pwm_set_gpio_level(PWM4_GPIO_PIN,100);
-//
-//    sleep_ms(1000);
-//
-//    adc_run(true);
-//    printf("ADC Started.\n");
-}
-
-// stops the network analyzer program and re-inits the CAS.
-void network_analyzer_slave_stop() {
-    return;
-//    printf("Stopping NA mode...\n");
-//    adc_run(false);
-//    adc_fifo_drain();
-//    irq_set_enabled(ADC_IRQ_FIFO,false);
-//    pwm_set_gpio_level(PWM1_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM2_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM3_GPIO_PIN,0);
-//    pwm_set_gpio_level(PWM4_GPIO_PIN,0);
-//    capstone_adc_init(cas, isns_dma_handler);
-//    printf("NA mode exited.\n");
 }
 
 void other_core() {
@@ -360,17 +202,21 @@ void other_core() {
 
             while (1) {
                 uint32_t sig = multicore_fifo_pop_blocking();
-                if (sig == UI_SIG_ICTL_START_STOP) break;
-                if(mutex_try_enter(&current_controller_lock,NULL)) {
-                    if (sig == UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE) { current_controller.controller_paused = !current_controller.controller_paused;
-                    printf("%s\n",current_controller.controller_paused ? "PAUSED" : "RESUMED");}
-                    else {
-                        current_controller.PI_SP = sig;
-                        printf("\tPISP %d\n", current_controller.PI_SP);
-                    }
-                    mutex_exit(&current_controller_lock);
+                if (sig == UI_SIG_ICTL_START_STOP) {
+                    break;
                 }
-                else printf("MUTEX LOCKED\n");
+                else {
+                    if (mutex_try_enter(&current_controller_lock, NULL)) {
+                        if (sig == UI_SIG_CURRENT_CONTROLLER_PAUSE_UNPAUSE) {
+                            current_controller.controller_paused = !current_controller.controller_paused;
+                            printf("%s\n", current_controller.controller_paused ? "PAUSED" : "RESUMED");
+                        } else {
+                            current_controller.PI_SP = sig;
+                            printf("\tPISP %d\n", current_controller.PI_SP);
+                        }
+                        mutex_exit(&current_controller_lock);
+                    } else printf("MUTEX LOCKED\n");
+                }
             }
 
             printf("[CL control paused, all outputs to 0]\n");
@@ -470,6 +316,7 @@ int main(void) {
     int D1_thresh = 10;
     int D1_thresh_setting_multiplier = 2;
     int PI_setpoint = 10;
+    int ictl_zero_latch = 0;
 
     while(1) {
         int uii = stdio_getchar_timeout_us(100);
@@ -483,6 +330,7 @@ int main(void) {
                        "s: read Flash\n"
                        "m: change multiplier\n"
                        "0-9: set target current or pwm\n"
+                       "/: toggle target current"
                        "p & l: inc/dec target current\n"
                        "i: test INA236 writing\n"
                        "u: dep\n"
@@ -538,68 +386,42 @@ int main(void) {
                 }
                 PI_setpoint = 4 * ((uint16_t) ui - '0') * D1_thresh_setting_multiplier;
                 printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
-                if (ict_latch) {
+                if (ict_latch & !ictl_zero_latch) {
                     multicore_fifo_push_blocking(PI_setpoint);
                 }
             }
-            if (ui == 'p' || ui == 'l') {
+            if (ui == '/') {
                 if (ict_latch) {
-                    if (ui == 'p') PI_setpoint += D1_thresh_setting_multiplier / 2;
-                    if (ui == 'l') PI_setpoint += -D1_thresh_setting_multiplier / 2;
-                    printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
-                    if (ict_latch) {
-                        multicore_fifo_push_blocking(PI_setpoint);
+                    if(!ictl_zero_latch) {
+                        ictl_zero_latch = !ictl_zero_latch;
+                        multicore_fifo_push_blocking(0);
+                        printf("[Paused output current; press '/' to resume]\n");
                     }
-                } else if (pwm_latch) {
+                    else {
+                        ictl_zero_latch = !ictl_zero_latch;
+                        multicore_fifo_push_blocking(PI_setpoint);
+                        printf("[Resumed output current at  %.3fA]\n",PI_setpoint / 8.0);
+                    }
+                }
+            }
+            if (ui == 'p' || ui == 'l') {
+                if (pwm_latch) {
                     if (ui == 'p') multicore_fifo_push_blocking(UI_SIG_PWM_INC);
                     if (ui == 'l') multicore_fifo_push_blocking(UI_SIG_PWM_DEC);
                 }
-            }
-            if (ui == 'i') {
-                printf("Writing to INA236...\n");
-                uint8_t INA236B_msg[3] = {7, 0xAB, 0xCD};
-                uint8_t *INA236_read_dst;
-                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
-                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
-                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
-                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
-
-                // 4127h
-                INA236B_msg[0] = 0; //config reg
-                INA236B_msg[1] = 0x41 | 0x1 << 4; // default config MSbyte with shunt ADC range set to 20.48mV
-                INA236B_msg[2] = 0x27; // default config LSbyte
-
-                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 3, 1, 1000000);
-
-                free(INA236_read_dst);
-            }
-            if (ui == 'u') {
-                printf("Reading INA236 Shunt Voltage...\n");
-                uint8_t INA236B_msg[1] = {0x1};
-                uint8_t *INA236_read_dst;
-                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
-                int16_t *INA236_ADC_val = (uint16_t *) INA236_read_dst;
-                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
-                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
-                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
-                printf("ADC value: %d\n", *INA236_ADC_val);
-                free(INA236_read_dst);
-            }
-            if (ui == 'v') {
-                printf("Reading INA236 Bus Voltage...\n");
-                uint8_t INA236B_msg[1] = {0x2};
-                uint8_t *INA236_read_dst;
-                INA236_read_dst = (uint8_t *) malloc(sizeof(uint8_t) * 2);
-
-                i2c_write_timeout_us(i2c0, 0x48, INA236B_msg, 1, 1, 1000000);
-                i2c_read_timeout_us(i2c0, 0x48, INA236_read_dst, 2, 0, 1000000);
-                printf("Read values: 0x%02X%02X\n", INA236_read_dst[0], INA236_read_dst[1]);
-                printf("ADC value: %d\n", ((int16_t) INA236_read_dst[0] << 8) | ((int16_t) INA236_read_dst[1]));
-                free(INA236_read_dst);
+                else {
+                    if (ui == 'p') PI_setpoint += D1_thresh_setting_multiplier / 2;
+                    if (ui == 'l') PI_setpoint += -D1_thresh_setting_multiplier / 2;
+                    printf("PI setpoint: %.3fA\n", PI_setpoint / 8.0);
+                    if (ict_latch && !ictl_zero_latch) {
+                        multicore_fifo_push_blocking(PI_setpoint);
+                    }
+                }
             }
             if (ui == ' ' && !pwm_latch) {
                 ict_latch = !ict_latch;
                 multicore_fifo_push_blocking(UI_SIG_ICTL_START_STOP);
+                multicore_fifo_push_blocking(PI_setpoint);
             }
             if (ui == 'j' && !ict_latch) {
                 pwm_latch = !pwm_latch;
@@ -622,24 +444,30 @@ int main(void) {
         else if (multicore_fifo_rvalid()) {
             int mcdlsig = multicore_fifo_pop_blocking();
             if ((mcdlsig & MC_DL_FLAG_MASK )== MC_DL_TRIG) {
-                if((datalogging_waddr&0xFFF) == 0) {
+                // check if these writes will flow to the next sector.
+                // Sector number @ bit 12
+                if((datalogging_waddr&0x1000) != ((datalogging_waddr+128*3)&0x1000)) {
                     printf("clearing sector...");
-                    W25_Clear_Sector_Blocking(datalogging_waddr);
+                    W25_Clear_Sector_Blocking((datalogging_waddr+128*3)&(~0xFFF));
                     printf("\t\tclear done (status %d)\n",W25_Read_Status_1());
                 }
 
                 datalogger_q_r = mcdlsig & MC_DL_BUFF_I_MASK;
-                printf("cursor at %d\n",datalogger_q_r);
+                //printf("cursor at %d\n",datalogger_q_r);
 
-                printf("writing ISNS data [0x%08X]...",datalogging_waddr);
+                //printf("writing ISNS data [0x%08X]...",datalogging_waddr);
                 W25_Program_Page_Blocking(datalogging_waddr,(uint8_t *)&ISNS_ADC_value_12_bit_avg[datalogger_q_r],128);
-                printf("\t\twrite done (status %d)\n",W25_Read_Status_1());
+                printf("Logging... [1/3 %0x06X (%d)]",datalogging_waddr,W25_Read_Status_1());
                 datalogging_waddr += 128;
 
-
-                printf("writing TSNS data [0x%08X]...",datalogging_waddr);
+                //printf("writing TSNS data [0x%08X]...",datalogging_waddr);
                 W25_Program_Page_Blocking(datalogging_waddr,(uint8_t *)&TSNS_ADC_value_12_bit_avg[datalogger_q_r],128);
-                printf("\t\twrite done (status %d)\n",W25_Read_Status_1());
+                printf(" [2/3 %0x06X (%d)]",datalogging_waddr,W25_Read_Status_1());
+                datalogging_waddr += 128;
+
+                //printf("writing TSNS data [0x%08X]...",datalogging_waddr);
+                W25_Program_Page_Blocking(datalogging_waddr,(uint8_t *)&dutycycle_datalog[datalogger_q_r],128);
+                printf(" [3/3 %0x06X (%d)]\n",datalogging_waddr,W25_Read_Status_1());
                 datalogging_waddr += 128;
             }
         }
