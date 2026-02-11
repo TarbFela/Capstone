@@ -96,7 +96,8 @@ void isns_dma_handler() {
 
     // TODO: the current buffer size is 256 with a quarter-size (half per DMA, half per ADC ch) of 64. Divide by 2^6.
     tsns_avg >>= 6;
-    isns_avg >>= 6;
+    // multiply the isns avg by eight, the PI_SP resolution (while dividing for averaging)
+    isns_avg >>= 3;
 
     // every fourth DSP IRQ should log a "sample" (x2ch)
     if(((++counter)&0x3) == 0) {
@@ -146,8 +147,13 @@ void isns_dma_handler() {
         //          NEW GAIN VALUE WITH G=150
         // 4096 * 0.0005 * 150 / 3.3 = 93.1
         // 23.75 ≈ 24 = 93.1 / 4 as per above resolution comment
-        int targ = current_controller.PI_SP * 24;
-        d += -(isns_avg*2 > targ) + (isns_avg*2 < targ) - 2 * (isns_avg*2 + 16 > targ) - 2 * (isns_avg*2 + 32 > targ);
+        //      260204      NEW GAIN VALUE WITH G=40
+        //          NEW GAIN VALUE WITH G=50 (47.8)
+        // 4096 * 0.0005 * 47.8 / 3.3 = 29.66
+        // Since our PI_SP resolution is 1/8 amps (i.e. +1 PI_SP = +0.125A), we are
+        // multiplying our isns_avg by eight in our "averaging" function
+        int targ = current_controller.PI_SP * 30;
+        d += -(isns_avg > targ) + (isns_avg < targ) - 2 * (isns_avg + 16 > targ) - 2 * (isns_avg + 32 > targ);
         if(d>380) d= 380;
         if(d<90) d= 90;
         pwm_set_gpio_level(PWM2_GPIO_PIN,d);
@@ -375,7 +381,11 @@ int main(void) {
 
             }
             if (ui == 'm') {
-                if ((++D1_thresh_setting_multiplier) > 6) D1_thresh_setting_multiplier = 1;
+                if ((++D1_thresh_setting_multiplier) > 24) D1_thresh_setting_multiplier = 1;
+                printf("MULTIPLIER SET TO %d\n", D1_thresh_setting_multiplier);
+            }
+            if (ui == 'M') {
+                if ((--D1_thresh_setting_multiplier) < 1) D1_thresh_setting_multiplier = 24;
                 printf("MULTIPLIER SET TO %d\n", D1_thresh_setting_multiplier);
             }
             if (ui >= '0' && ui <= '9') {
