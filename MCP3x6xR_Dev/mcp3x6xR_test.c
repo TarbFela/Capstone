@@ -20,13 +20,31 @@ int main() {
     scanf(" %c",ui);
 
     uint8_t val, stat;
-    for(int i =0; i<3; i++) {
+    for(int i =0; i<4; i++) {
         printf("Reading cfg%d register...\t",i);
         val = 0;
         stat = 0;
         mcp_read_cfgn(&mcp, &val,i);
         printf("Value: 0x%02X \tStatus: %d\n", val, stat);
     }
+
+    printf("\tWRITING to cfg3: 0x1<<4...");
+    mcp_write_cfgn(&mcp,MCP_CFG3_DATA_FORMAT_LJ32,3);
+    printf("\tdone.\n");
+    printf("Reading cfg3 register...\t");
+    val = 0;
+    stat = 0;
+    mcp_read_cfgn(&mcp, &val,3);
+    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
+
+    printf("\tWRITING to cfg3: 0x2<<4...");
+    mcp_write_cfgn(&mcp,MCP_CFG3_DATA_FORMAT_SNG8,3);
+    printf("\tdone.\n");
+    printf("Reading cfg3 register...\t");
+    val = 0;
+    stat = 0;
+    mcp_read_cfgn(&mcp, &val,3);
+    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
 
     printf("Done. Provide a character to exit.\n");
     scanf(" %c",ui);
