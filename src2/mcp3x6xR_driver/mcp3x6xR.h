@@ -339,21 +339,23 @@ Bit 3-0 MUX_VIN-[3:0]: Input Selection
 #define MCP_MUX_P_SEL(mux_val) ((mux_val)<<4)
 #define MCP_MUX_N_SEL(mux_val) (mux_val)
 
-#define MCP_MUX_VAL_Int_VCM             0xF
-#define MCP_MUX_VAL_Int_Temp_Diode_M    0xE
-#define MCP_MUX_VAL_Int_Temp_Diode_P    0xD
-#define MCP_MUX_VAL_REFIN_N             0xC
-#define MCP_MUX_VAL_REFIN_P             0xB
-#define MCP_MUX_VAL_AVDD                0x9
-#define MCP_MUX_VAL_AGND                0x8
-#define MCP_MUX_VAL_CH7                 0x7
-#define MCP_MUX_VAL_CH6                 0x6
-#define MCP_MUX_VAL_CH5                 0x5
-#define MCP_MUX_VAL_CH4                 0x4
-#define MCP_MUX_VAL_CH3                 0x3
-#define MCP_MUX_VAL_CH2                 0x2
-#define MCP_MUX_VAL_CH1                 0x1
-#define MCP_MUX_VAL_CH0                 0x0
+typedef enum mcp_mux_vals {
+    MCP_MUX_VAL_Int_VCM             = 0xF,
+    MCP_MUX_VAL_Int_Temp_Diode_M    = 0xE,
+    MCP_MUX_VAL_Int_Temp_Diode_P    = 0xD,
+    MCP_MUX_VAL_REFIN_N             = 0xC,
+    MCP_MUX_VAL_REFIN_P             = 0xB,
+    MCP_MUX_VAL_AVDD                = 0x9,
+    MCP_MUX_VAL_AGND                = 0x8,
+    MCP_MUX_VAL_CH7                 = 0x7,
+    MCP_MUX_VAL_CH6                 = 0x6,
+    MCP_MUX_VAL_CH5                 = 0x5,
+    MCP_MUX_VAL_CH4                 = 0x4,
+    MCP_MUX_VAL_CH3                 = 0x3,
+    MCP_MUX_VAL_CH2                 = 0x2,
+    MCP_MUX_VAL_CH1                 = 0x1,
+    MCP_MUX_VAL_CH0                 = 0x0}
+    mcp_mux_vals_t;
 
 typedef uint8_t mcp_status_t;
 
@@ -370,6 +372,9 @@ mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n);
 
 mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n);
 
-mcp_status_t mcp_singe_conversion(mcp_info_t *s, uint8_t *post_status);
+// NOTE: This is currently written for the MCP346xR, **NOT** the MCP356xR which has a 24-bit adc output.
+mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst);
+
+mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux_n);
 
 #endif
