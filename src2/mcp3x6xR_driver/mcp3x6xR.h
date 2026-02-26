@@ -36,6 +36,7 @@
 #define MCP_CMD_ADC_REG_READ_STAT(addr)     (((addr)<<2)|0x1)
 #define MCP_CMD_ADC_REG_READ_INCR(addr)     (((addr)<<2)|0x3)
 #define MCP_CMD_ADC_REG_WRITE_INCR(addr)    (((addr)<<2)|0x2)
+#define MCP_CMD_DUMMY                       0x3C
 
 /*  TABLE 8-1: INTERNAL REGISTERS SUMMARY
     0x0 ADCDATA 4/24/32 R Latest A/D conversion data output value (24 or 32 bits depending on DATA_FORMAT[1:0]) or modulator output stream (4-bit wide) in MDAT Output mode
@@ -325,5 +326,7 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, int mosi_pin, int miso_pin, int cs_pin,
 mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n);
 
 mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n);
+
+mcp_status_t mcp_singe_conversion(mcp_info_t *s, uint8_t *post_status);
 
 #endif

@@ -53,7 +53,7 @@ mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n) {
     gpio_put(s->cs,MCP_CS_DESELECT);
 
     *dst = rxbuff[1];
-    return (mcp_status_t)rxbuff[0];
+    return rxbuff[0];
 }
 
 mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n) {
@@ -66,6 +66,34 @@ mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n) {
     sleep_us(MCP_SLEEPTIME_US);
 
     spi_write_read_blocking(MCP_SPI, cmd, rx, 2);
+
+    sleep_us(MCP_SLEEPTIME_US);
+    gpio_put(s->cs,MCP_CS_DESELECT);
+
+    return rx[0];
+}
+
+mcp_status_t mcp_singe_conversion(mcp_info_t *s, uint8_t *post_status) {
+    uint8_t tx[3] = {MCP_CMD_DEV_ADDR | MCP_CMD_ADC_CONV_START_FAST, 0x0, 0x0};
+    uint8_t rx[3] = {0xFF,0xFF,0xFF};
+
+    gpio_put(s->cs,MCP_CS_SELECT);
+    sleep_us(MCP_SLEEPTIME_US);
+
+    spi_write_read_blocking(MCP_SPI, tx, rx, 1);
+
+    sleep_us(MCP_SLEEPTIME_US);
+    gpio_put(s->cs,MCP_CS_DESELECT);
+
+    *post_status = rx[0];
+    rx[0] = 0xFF;
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_ADCDATA);
+    sleep_ms(100);
+
+    gpio_put(s->cs,MCP_CS_SELECT);
+    sleep_us(MCP_SLEEPTIME_US);
+
+    spi_write_read_blocking(MCP_SPI, tx, rx, 1);
 
     sleep_us(MCP_SLEEPTIME_US);
     gpio_put(s->cs,MCP_CS_DESELECT);

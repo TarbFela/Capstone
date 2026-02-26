@@ -46,6 +46,21 @@ int main() {
     mcp_read_cfgn(&mcp, &val,3);
     printf("Value: 0x%02X \tStatus: %d\n", val, stat);
 
+    printf("\tWRITING to cfg3: 0x0...");
+    mcp_write_cfgn(&mcp,0x00,3);
+    printf("\tdone.\n");
+    printf("Reading cfg3 register...\t");
+    val = 0;
+    stat = 0;
+    mcp_read_cfgn(&mcp, &val,3);
+    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
+
+    uint16_t adc_val;
+    for(int i = 0; i<10; i++) {
+        printf("[%d/%d] Attempting ADC read...",i,10);
+        stat = mcp_singe_conversion(&mcp, &val);
+        printf("Status (post): 0x%02X \tStatus (pre): 0x%02X\n", val, stat);
+    }
     printf("Done. Provide a character to exit.\n");
     scanf(" %c",ui);
 
