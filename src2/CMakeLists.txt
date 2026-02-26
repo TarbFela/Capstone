@@ -18,6 +18,7 @@ add_executable(capstone_pwm
 	capstone_dsp.c
 	capstone_adc.c
 	capstone_w25.c
+	capstone_measurement_routines.c
 )
 
 target_include_directories(capstone_pwm

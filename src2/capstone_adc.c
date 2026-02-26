@@ -24,7 +24,7 @@ void capstone_adc_init(capstone_adc_struct_t *cas, void (handler_function)(void)
     // subsequent RR goes TSNS, ISNS, TSNS, ISNS, [...]
     // So, actual order is: ISNS, TSNS, ISNS, TSNS, [...]
     adc_set_round_robin(0x1<<(ISNS_ADC_PIN-26) | 0x1<<(TSNS_ADC_PIN-26));
-    // 96kHz = 48MHz / 500
+    // 48kHz = 48MHz / 1000
     adc_set_clkdiv(1000);
 
     uint adc_dma_daisy_chain[2];

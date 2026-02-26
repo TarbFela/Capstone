@@ -1,0 +1,7 @@
+ADC is round-robin at 48kHz. It touches two channels, so that's 24kHz per channel. The isns_irq is triggered every 128 (ADC_BUFFER_SIZE/2) samples, or at a 375Hz.
+
+At 375Hz, a 64-value average is calculated for each channel.
+
+The datalogger buffer gets a new sample every fourth DSP IRQ. So that's 93.75Hz; every 93.75Hz, ALL channels (buffers) are written to.
+
+This means our sampling rate for every data stream for logging is 93.75Hz.
