@@ -22,8 +22,15 @@ Reading and writing to registers requires a corresponding command type value in 
 uint8_t cmd = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_CONFIG2);
 ```
 
+### ADC MUX Input Selection
+
+A similar macro to the one described above is used to select ADC inputs. Since each ADC input (+/-) may select from any of 15 sources and since the corresponding mux field values are the same between the positive and negative inputs, mux selection is done accordingly:
+
+```
+MCP_MUX_P_SEL(MCP_MUX_VAL_CH4) | MCP_MUX_N_SEL(MCP_MUX_VAL_CH0)
+```
+
 ### Function return values
 
 Because these ADCs read out their status while receiving the command byte, all ADC SPI commands are structured to return an `mcp_status_t` (name might change to be more specific). This is a single byte. Another function might be written to parse this byte. Bitfields are defined as `MCP_STAT_<...>`.
 
- 

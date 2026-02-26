@@ -27,33 +27,14 @@ int main() {
         mcp_read_cfgn(&mcp, &val,i);
         printf("Value: 0x%02X \tStatus: %d\n", val, stat);
     }
+    // might need some delay  between selecting the clock and readying the ADC
+    uint8_t cfg0_val = MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY | MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN;
+    uint8_t cfg1_val =
+    uint8_t cfg2_val =
+    uint8_t cfg3_val = MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY;
 
-    printf("\tWRITING to cfg3: 0x1<<4...");
-    mcp_write_cfgn(&mcp,MCP_CFG3_DATA_FORMAT_LJ32,3);
-    printf("\tdone.\n");
-    printf("Reading cfg3 register...\t");
-    val = 0;
-    stat = 0;
-    mcp_read_cfgn(&mcp, &val,3);
-    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
+    mcp_write_cfgn(&mcp,cfg3_val,3);
 
-    printf("\tWRITING to cfg3: 0x2<<4...");
-    mcp_write_cfgn(&mcp,MCP_CFG3_DATA_FORMAT_SNG8,3);
-    printf("\tdone.\n");
-    printf("Reading cfg3 register...\t");
-    val = 0;
-    stat = 0;
-    mcp_read_cfgn(&mcp, &val,3);
-    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
-
-    printf("\tWRITING to cfg3: 0x0...");
-    mcp_write_cfgn(&mcp,0x00,3);
-    printf("\tdone.\n");
-    printf("Reading cfg3 register...\t");
-    val = 0;
-    stat = 0;
-    mcp_read_cfgn(&mcp, &val,3);
-    printf("Value: 0x%02X \tStatus: %d\n", val, stat);
 
     uint16_t adc_val;
     for(int i = 0; i<10; i++) {

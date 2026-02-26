@@ -191,16 +191,16 @@ does not allow Continuous Conversion mode operation (which is then replaced by a
 consecutive One-Shot mode conversions).
 0 = Analog input multiplexer auto-zeroing algorithm is disabled (default).
  */
-#define MCP_CG2_AUTO_ZERO_MUX_EN    1<<2
-#define MCP_CG2_AUTO_ZERO_MUX_DIS   0x0
+#define MCP_CFG2_AUTO_ZERO_MUX_EN    1<<2
+#define MCP_CFG2_AUTO_ZERO_MUX_DIS   0x0
 /*
 bit 1 AZ_REF: Auto-Zeroing Reference Buffer Setting
 1 = Internal voltage reference buffer chopping algorithm is enabled. This setting has no effect
 when external voltage reference is selected (VREF_SEL = 0) (default).
 0 = Internal voltage reference buffer chopping auto-zeroing algorithm is disabled.
  */
-#define MCP_CG2_AUTO_ZERO_REF_EN 0x1<<1
-#define MCP_CG2_AUTO_ZERO_REF_DIS 0x0
+#define MCP_CFG2_AUTO_ZERO_REF_EN 0x1<<1
+#define MCP_CFG2_AUTO_ZERO_REF_DIS 0x0
 /*
 bit 0 RESERVED: Should always be equal to ‘1’
  */
@@ -311,6 +311,49 @@ bit 1-0 ADC_MODE[1:0]: ADC Operating Mode Selection
 #define MCP_CFG0_ADC_MODE_STDBY     0x2
 #define MCP_CFG0_ADC_MODE_SHTDWN    0x0
 
+
+/*======================================*
+ *          MUX INPUT SELECT            *
+ *======================================*/
+
+/*
+Bit 7-4 MUX_VIN+[3:0]: Input Selection
+Bit 3-0 MUX_VIN-[3:0]: Input Selection
+    1111 = Internal VCM
+    1110 = Internal Temperature Sensor Diode M (Temp Diode M)(1)
+    1101 = Internal Temperature Sensor Diode P (Temp Diode P)(1)
+    1100 = REFIN-
+    1011 = REFIN+/OUT
+    1010 = Reserved (do not use)
+    1001 = AVDD
+    1000 = AGND
+    0111 = CH7
+    0110 = CH6
+    0101 = CH5
+    0100 = CH4
+    0011 = CH3
+    0010 = CH2
+    0001 = CH1 (default for mux-)
+    0000 = CH0 (default for mux+)
+    */
+#define MCP_MUX_P_SEL(mux_val) ((mux_val)<<4)
+#define MCP_MUX_N_SEL(mux_val) (mux_val)
+
+#define MCP_MUX_VAL_Int_VCM             0xF
+#define MCP_MUX_VAL_Int_Temp_Diode_M    0xE
+#define MCP_MUX_VAL_Int_Temp_Diode_P    0xD
+#define MCP_MUX_VAL_REFIN_N             0xC
+#define MCP_MUX_VAL_REFIN_P             0xB
+#define MCP_MUX_VAL_AVDD                0x9
+#define MCP_MUX_VAL_AGND                0x8
+#define MCP_MUX_VAL_CH7                 0x7
+#define MCP_MUX_VAL_CH6                 0x6
+#define MCP_MUX_VAL_CH5                 0x5
+#define MCP_MUX_VAL_CH4                 0x4
+#define MCP_MUX_VAL_CH3                 0x3
+#define MCP_MUX_VAL_CH2                 0x2
+#define MCP_MUX_VAL_CH1                 0x1
+#define MCP_MUX_VAL_CH0                 0x0
 
 typedef uint8_t mcp_status_t;
 
