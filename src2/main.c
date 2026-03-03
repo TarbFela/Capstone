@@ -8,11 +8,8 @@
 
 #include "hardware/adc.h"
 #include "hardware/dma.h"
-#include "hardware/spi.h"
 #include "hardware/pwm.h"
 #include "hardware/i2c.h"
-#include "hardware/irq.h"
-#include "hardware/timer.h"
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 
@@ -177,6 +174,8 @@ void other_core() {
     capstone_adc_init(cas, isns_dma_handler);
     mutex_init(&current_controller_lock);
 
+    //note: most of this functionality is deprecated and unused and need to be updated.
+    // TODO: rewrite current control code so it is modular.
     PI_controller_init(&current_controller,
                        10,
                        569,
