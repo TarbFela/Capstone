@@ -5,7 +5,7 @@
 #ifndef CAPSTONE_PWM_CAPSTONE_THERMOCOUPLE_H
 #define CAPSTONE_PWM_CAPSTONE_THERMOCOUPLE_H
 #include <stdint.h>
-const uint16_t ktype_voltages_len = 330;
+#define ktype_voltages_len 330
 uint16_t ktype_voltages_20C_x4092[] = {
         3265,
         3429,

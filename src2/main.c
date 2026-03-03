@@ -45,7 +45,7 @@ mutex_t current_controller_lock;
 volatile PI_controller_t current_controller;
 
 volatile capstone_adc_struct_t *cas;
-volatile uint16_t *TSNS_ADC_value_12_bit_avg, *ISNS_ADC_value_12_bit_avg, *dutycycle_datalog;
+volatile uint16_t *TSNS_ADC_value_12_bit_avg, *ISNS_ADC_value_12_bit_avg, *dutycycle_datalog, *T_datalog;
 volatile uint16_t T_glob = 0;
 volatile uint32_t VTCMV_glob = 0;
 
@@ -87,7 +87,7 @@ void isns_dma_handler() {
     // TODO: configure the DMAs as wrapping rings so that they don't need to be reset. or use a third, cleanup DMA
     (cas->adc_dma_daisy_chain_hw[culprit_dma_daisy_chain_index])->write_addr = (uintptr_t)(data);
 
-    // ultra-shitty DSP:
+    // so-called DSP:
     int isns_avg = 0;
     for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) isns_avg+= data[2*i];
 
@@ -104,11 +104,13 @@ void isns_dma_handler() {
         TSNS_ADC_value_12_bit_avg[datalogger_q_w] = tsns_avg;
         ISNS_ADC_value_12_bit_avg[datalogger_q_w] = isns_avg;
         dutycycle_datalog[datalogger_q_w] = d;
+        T_datalog[datalogger_q_w] = T_glob;
         //                                                  DATALOGGING
         // round-robin buffer/queue
         // TRIGGER every 64 samples (128 bytes x 3ch = 384bytes = 1.5 pages)
         // WRAP every 128 samples
         if ((datalogger_q_w & 63) == 63) {
+            //non-blocking signal to push. TODO: if a data-log multicore push *doesn't* happen, there's no timestamp correction.
             if (multicore_fifo_wready()) {
                 multicore_fifo_push_blocking(MC_DL_TRIG | (MC_DL_BUFF_I_MASK&(datalogger_q_w-63)));
             }
@@ -308,6 +310,10 @@ int main(void) {
 
     TSNS_ADC_value_12_bit_avg = (uint16_t *)malloc(sizeof(uint16_t) * 256);
     ISNS_ADC_value_12_bit_avg = (uint16_t *)malloc(sizeof(uint16_t) * 256);
+    dutycycle_datalog = (uint16_t *)malloc(sizeof(uint16_t) * 256);
+    T_datalog = (uint16_t *)malloc(sizeof(uint16_t) * 256);
+
+    uint32_t datalogger_q_r_cached = 0;
 
     if(TSNS_ADC_value_12_bit_avg == NULL || ISNS_ADC_value_12_bit_avg == NULL) {
         sleep_ms(10000);
@@ -448,9 +454,16 @@ int main(void) {
                 //multicore_fifo_push_blocking(0xDEAD);
             }
             if (ui == 't') {
-                printf("Temp: %.3f\tADC: %d\tVtc_mv: %d\n", T_glob / 8.0, TSNS_ADC_value_12_bit_avg[0], VTCMV_glob);
+                if(datalogger_q_r_cached == 0) continue; // ignore the command if we haven't populated enough data.
+                printf("Temp: %.3f\tRamp Rate: %.3f ºK/s\tADC: %d\tVtc_mv: %d\n",
+                       T_glob / 8.0,
+                       0.732421875*((float)T_datalog[datalogger_q_r_cached+64] - (float)T_datalog[datalogger_q_r_cached])/8.0,
+                       TSNS_ADC_value_12_bit_avg[0],
+                       VTCMV_glob);
+                // note: 0.732421875 is 48kHz (ADC) / 2 (number of ADC chan) / 128 (ADC_BUFF half-size) / 4 (ADC-> datalog mult) / 64 (number of logged samples averaged over)
             }
         }
+        // poll other core for signals
         else if (multicore_fifo_rvalid()) {
             int mcdlsig = multicore_fifo_pop_blocking();
             if ((mcdlsig & MC_DL_FLAG_MASK )== MC_DL_TRIG) {
@@ -463,6 +476,7 @@ int main(void) {
                 }
 
                 datalogger_q_r = mcdlsig & MC_DL_BUFF_I_MASK;
+                datalogger_q_r_cached = datalogger_q_r;
                 //printf("cursor at %d\n",datalogger_q_r);
 
                 //printf("writing ISNS data [0x%08X]...",datalogging_waddr);

@@ -82,9 +82,9 @@
  * STAT[0] = POR_STATUS (POR interrupt status)
  */
 
-#define MCP_STAT_DR_STATUS_MASK 0x4
-#define MCP_STAT_CRCCFG_STATUS_MASK 0x2
-#define MCP_STAT_POR_STATUS_MASK 0x1
+#define MCP_STAT_nDR_STATUS_MASK 0x4
+#define MCP_STAT_nCRCCFG_STATUS_MASK 0x2
+#define MCP_STAT_nPOR_STATUS_MASK 0x1
 
 /*======================================*
  *      CONFIGURATION REGISTERS         *

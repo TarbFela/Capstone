@@ -86,10 +86,22 @@ mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst) {
     sleep_us(MCP_SLEEPTIME_US);
     gpio_put(s->cs,MCP_CS_DESELECT);
 
-    // wait and then read out data.
+
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_DUMMY;
+    // wait
+    do {
+        rx[0] = 0xFF;
+        gpio_put(s->cs, MCP_CS_SELECT);
+        sleep_us(MCP_SLEEPTIME_US);
+        spi_write_read_blocking(MCP_SPI, tx, rx, 1);
+        sleep_us(MCP_SLEEPTIME_US);
+        gpio_put(s->cs, MCP_CS_DESELECT);
+    } while(rx[0]&MCP_STAT_nDR_STATUS_MASK);
+
+
+    // read out data
     rx[0] = 0xFF;
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_ADCDATA);
-    sleep_ms(100);
 
     gpio_put(s->cs,MCP_CS_SELECT);
     sleep_us(MCP_SLEEPTIME_US);
