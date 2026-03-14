@@ -401,6 +401,7 @@ typedef enum mcp_mux_vals {
 #define MCP_STATUS_BAD_INPUTS 0xFF
 typedef uint8_t mcp_status_t;
 
+// does nothing right now. Maybe will do something later.
 typedef struct {
     uint8_t conv_mode; // continuous vs one-shot
     uint8_t data_format;
@@ -424,6 +425,7 @@ typedef struct {
     uint8_t mux_mode_inputs[2];
 } mcp_config_t;
 
+// TODO: write the config struct and functions.
 typedef struct mcp_info {
     spi_inst_t *spi;
     int cs;

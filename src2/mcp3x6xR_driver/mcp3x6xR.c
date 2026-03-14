@@ -20,8 +20,6 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     gpio_put(cs_pin, MCP_CS_DESELECT);
     gpio_set_dir(cs_pin, GPIO_OUT);
 
-    sleep_ms(10); //needless.
-
     spi_init(spi, 80*1000); // 80kHz
     // drive device in 0,0 mode
     spi_set_format(s->spi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
