@@ -7,7 +7,7 @@ include(pico_sdk_import.cmake)
 project(mcp3x6xR_dev)
 
 set(CMAKE_C_STANDARD 11)
-set(PICO_BOARD pico_w)
+set(PICO_BOARD pico2)
 
 
 # initialize the Raspberry Pi Pico SDK

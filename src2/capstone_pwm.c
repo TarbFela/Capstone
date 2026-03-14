@@ -11,10 +11,23 @@ void capstone_pwm_init() {
     uint gpio3 = PWM3_GPIO_PIN;
     uint gpio4 = PWM4_GPIO_PIN;
 
+    uint gpio5 = PWM5_GPIO_PIN;
+    uint gpio6 = PWM6_GPIO_PIN;
+    uint gpio7 = PWM7_GPIO_PIN;
+    uint gpio8 = PWM8_GPIO_PIN;
+
     uint slice_num1 = pwm_gpio_to_slice_num(gpio1);
     uint slice_num2 = pwm_gpio_to_slice_num(gpio2);
     uint slice_num3 = pwm_gpio_to_slice_num(gpio3);
     uint slice_num4 = pwm_gpio_to_slice_num(gpio4);
+    uint slice_num5 = pwm_gpio_to_slice_num(gpio5);
+    uint slice_num6 = pwm_gpio_to_slice_num(gpio6);
+    uint slice_num7 = pwm_gpio_to_slice_num(gpio7);
+    uint slice_num8 = pwm_gpio_to_slice_num(gpio8);
+    pwm_set_irq_enabled(slice_num1,false);
+    pwm_set_irq_enabled(slice_num2,false);
+    pwm_set_irq_enabled(slice_num3,false);
+    pwm_set_irq_enabled(slice_num4,false);
     pwm_set_irq_enabled(slice_num1,false);
     pwm_set_irq_enabled(slice_num2,false);
     pwm_set_irq_enabled(slice_num3,false);
@@ -24,12 +37,19 @@ void capstone_pwm_init() {
     uint chan_num2 = pwm_gpio_to_channel(gpio2);
     uint chan_num3 = pwm_gpio_to_channel(gpio3);
     uint chan_num4 = pwm_gpio_to_channel(gpio4);
+    uint chan_num5 = pwm_gpio_to_channel(gpio5);
+    uint chan_num6 = pwm_gpio_to_channel(gpio6);
+    uint chan_num7 = pwm_gpio_to_channel(gpio7);
+    uint chan_num8 = pwm_gpio_to_channel(gpio8);
 
     gpio_set_function(PWM1_GPIO_PIN, GPIO_FUNC_PWM);
     gpio_set_function(PWM2_GPIO_PIN, GPIO_FUNC_PWM);
-
     gpio_set_function(PWM3_GPIO_PIN, GPIO_FUNC_PWM);
     gpio_set_function(PWM4_GPIO_PIN, GPIO_FUNC_PWM);
+    gpio_set_function(PWM5_GPIO_PIN, GPIO_FUNC_PWM);
+    gpio_set_function(PWM6_GPIO_PIN, GPIO_FUNC_PWM);
+    gpio_set_function(PWM7_GPIO_PIN, GPIO_FUNC_PWM);
+    gpio_set_function(PWM8_GPIO_PIN, GPIO_FUNC_PWM);
 
     pwm_config config = pwm_get_default_config();
     pwm_config_set_clkdiv_int(&config, 1);
@@ -39,10 +59,22 @@ void capstone_pwm_init() {
     pwm_init(slice_num2, &config, false);
     pwm_init(slice_num3, &config, false);
     pwm_init(slice_num4, &config, false);
+    pwm_init(slice_num5, &config, false);
+    pwm_init(slice_num6, &config, false);
+    pwm_init(slice_num7, &config, false);
+    pwm_init(slice_num8, &config, false);
 
-    pwm_set_counter(slice_num3, 500); // 50% offset...
+    // phase offsets
+    pwm_set_counter(slice_num3, 500);
+    pwm_set_counter(slice_num5, 250);
+    pwm_set_counter(slice_num7, 750);
     pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
     pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
+    pwm_set_gpio_level(PWM6_GPIO_PIN, 0);
+    pwm_set_gpio_level(PWM8_GPIO_PIN, 0);
 
-    pwm_set_mask_enabled(0x1 << slice_num1 | 0x1 << slice_num2 | 0x1 << slice_num3 | 0x1 << slice_num4);
+    pwm_set_mask_enabled(
+            0x1 << slice_num1 | 0x1 << slice_num2 | 0x1 << slice_num3 | 0x1 << slice_num4 |
+                    0x1 << slice_num5 | 0x1 << slice_num6 | 0x1 << slice_num7 | 0x1 << slice_num8
+            );
 }

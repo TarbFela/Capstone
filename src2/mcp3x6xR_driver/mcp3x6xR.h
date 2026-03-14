@@ -2,6 +2,7 @@
 #define MCP3X6XR_H
 
 #include <stdint.h>
+#include "hardware/spi.h"
 
 
 /*
@@ -339,6 +340,46 @@ Bit 3-0 MUX_VIN-[3:0]: Input Selection
 #define MCP_MUX_P_SEL(mux_val) ((mux_val)<<4)
 #define MCP_MUX_N_SEL(mux_val) (mux_val)
 
+/*======================================*
+ *          SCAN MODE SELECT            *
+ *======================================*/
+/*
+SCAN[n] Bit Channel Name                        Channel ID  MUX[7:0]    Corresponding Setting Specific ADC Gain
+15          OFFSET                              1111        0x88        None
+14          VCM                                 1110        0xF8        1x
+13          AVDD                                1101        0x98        0.33x
+12          TEMP                                1100        0xDE        1x
+11          Differential Channel D (CH6-CH7)    1011        0x67        None
+10          Differential Channel C (CH4-CH5)    1010        0x45        None
+9           Differential Channel B (CH2-CH3)    1001        0x23        None
+8           Differential Channel A (CH0-CH1)    1000        0x01        None
+7           Single-Ended Channel CH7            0111        0x78        None
+6           Single-Ended Channel CH6            0110        0x68        None
+5           Single-Ended Channel CH5            0101        0x58        None
+4           Single-Ended Channel CH4            0100        0x48        None
+3           Single-Ended Channel CH3            0011        0x38        None
+2           Single-Ended Channel CH2            0010        0x28        None
+1           Single-Ended Channel CH1            0001        0x18        None
+0           Single-Ended Channel CH0            0000        0x08        None
+ */
+
+#define MCP_SCAN_SEL_BIT_OFFSET     (0x1<<15)
+#define MCP_SCAN_SEL_BIT_VCM        (0x1<<14)
+#define MCP_SCAN_SEL_BIT_AVDD       (0x1<<13)
+#define MCP_SCAN_SEL_BIT_TEMP       (0x1<<12)
+#define MCP_SCAN_SEL_BIT_DIFF_D     (0x1<<11)
+#define MCP_SCAN_SEL_BIT_DIFF_C     (0x1<<10)
+#define MCP_SCAN_SEL_BIT_DIFF_B     (0x1<<9)
+#define MCP_SCAN_SEL_BIT_DIFF_A     (0x1<<8)
+#define MCP_SCAN_SEL_BIT_SE_CH7     (0x1<<7)
+#define MCP_SCAN_SEL_BIT_SE_CH6     (0x1<<6)
+#define MCP_SCAN_SEL_BIT_SE_CH5     (0x1<<5)
+#define MCP_SCAN_SEL_BIT_SE_CH4     (0x1<<4)
+#define MCP_SCAN_SEL_BIT_SE_CH3     (0x1<<3)
+#define MCP_SCAN_SEL_BIT_SE_CH2     (0x1<<2)
+#define MCP_SCAN_SEL_BIT_SE_CH1     (0x1<<1)
+#define MCP_SCAN_SEL_BIT_SE_CH0     (0x1<<0)
+
 typedef enum mcp_mux_vals {
     MCP_MUX_VAL_Int_VCM             = 0xF,
     MCP_MUX_VAL_Int_Temp_Diode_M    = 0xE,
@@ -357,16 +398,46 @@ typedef enum mcp_mux_vals {
     MCP_MUX_VAL_CH0                 = 0x0}
     mcp_mux_vals_t;
 
+#define MCP_STATUS_BAD_INPUTS 0xFF
 typedef uint8_t mcp_status_t;
 
+typedef struct {
+    uint8_t conv_mode; // continuous vs one-shot
+    uint8_t data_format;
+    uint8_t crc_format;
+    uint8_t crc_en;
+    uint8_t offset_cal_en;
+    uint8_t gain_cal_en;
+    uint8_t boost_current_sel;
+    uint8_t gain_sel;
+    uint8_t zero_mux_en;
+    uint8_t auto_zero_en;
+    uint8_t amclk_prescale;
+    uint8_t osr;
+    uint8_t vref_sel;
+    uint8_t partial_shutdown;
+    uint8_t clk_sel;
+    uint8_t bias_current_sel;
+    uint8_t adc_mode; //standby, shutdown, conversion
+    uint8_t input_mode; // mux or scan mode
+    uint16_t scan_mode_inputs[2];
+    uint8_t mux_mode_inputs[2];
+} mcp_config_t;
+
 typedef struct mcp_info {
+    spi_inst_t *spi;
     int cs;
     int miso;
     int mosi;
     int sck;
+    mcp_config_t cfg;
 } mcp_info_t;
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, int mosi_pin, int miso_pin, int cs_pin, int sck_pin);
+
+
+
+
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin);
 
 mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n);
 

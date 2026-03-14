@@ -7,6 +7,7 @@
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
+#include "../src2/ADPC_cfg.h"
 
 int main() {
     stdio_init_all();
@@ -20,7 +21,7 @@ int main() {
 
     // wait for user input.
     scanf(" %c",ui);
-    mcp_spi_init(&mcp, 11,12,13,10);
+    mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
     printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
 
     printf("provide a character to continue...\n");

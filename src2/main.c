@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-//#include <math.h>
 
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
@@ -87,14 +86,14 @@ void isns_dma_handler() {
     // so-called DSP:
     int isns_avg = 0;
     for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) isns_avg+= data[2*i];
+    // multiply the isns avg by eight, the PI_SP resolution (while dividing for averaging)
+    isns_avg >>= 3;
 
     int tsns_avg = 0;
     for(int i = 0; i<ADC_BUFFER_SIZE/4; i++) tsns_avg += data[2*i + 1];
-
-    // TODO: the current buffer size is 256 with a quarter-size (half per DMA, half per ADC ch) of 64. Divide by 2^6.
+    // divide by 64
     tsns_avg >>= 6;
-    // multiply the isns avg by eight, the PI_SP resolution (while dividing for averaging)
-    isns_avg >>= 3;
+
 
     // every fourth DSP IRQ should log a "sample" (x2ch)
     if(((++counter)&0x3) == 0) {
@@ -157,6 +156,9 @@ void isns_dma_handler() {
         if(d<90) d= 90;
         pwm_set_gpio_level(PWM2_GPIO_PIN,d);
         pwm_set_gpio_level(PWM4_GPIO_PIN,d);
+        pwm_set_gpio_level(PWM6_GPIO_PIN,d);
+        pwm_set_gpio_level(PWM8_GPIO_PIN,d);
+    
     }
 
 
@@ -204,6 +206,10 @@ void other_core() {
             pwm_set_gpio_level(PWM2_GPIO_PIN, 100);
             pwm_set_gpio_level(PWM3_GPIO_PIN, 100);
             pwm_set_gpio_level(PWM4_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM5_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM6_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM7_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM8_GPIO_PIN, 100);
 
             capstone_adc_start(cas);
 
@@ -234,6 +240,10 @@ void other_core() {
             pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM5_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM6_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM7_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM8_GPIO_PIN, 0);
         }
         else if(ui == UI_SIG_NA_START_STOP) {
             network_analyzer_slave_start();
@@ -251,6 +261,10 @@ void other_core() {
             pwm_set_gpio_level(PWM2_GPIO_PIN, pwm_lvl);
             pwm_set_gpio_level(PWM3_GPIO_PIN, 100);
             pwm_set_gpio_level(PWM4_GPIO_PIN, pwm_lvl);
+            pwm_set_gpio_level(PWM5_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM6_GPIO_PIN, pwm_lvl);
+            pwm_set_gpio_level(PWM7_GPIO_PIN, 100);
+            pwm_set_gpio_level(PWM8_GPIO_PIN, pwm_lvl);
 
             adc_select_input(ISNS_ADC_PIN - 26);
             while (1) {
@@ -270,6 +284,8 @@ void other_core() {
                 else if(sig <= 9) pwm_lvl = sig*50 + 100;
                 pwm_set_gpio_level(PWM2_GPIO_PIN, pwm_lvl);
                 pwm_set_gpio_level(PWM4_GPIO_PIN, pwm_lvl);
+                pwm_set_gpio_level(PWM6_GPIO_PIN, pwm_lvl);
+                pwm_set_gpio_level(PWM8_GPIO_PIN, pwm_lvl);
                 printf("\tPWM %d\n",pwm_lvl);
             }
             multicore_fifo_drain();
@@ -279,6 +295,10 @@ void other_core() {
             pwm_set_gpio_level(PWM2_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM3_GPIO_PIN, 0);
             pwm_set_gpio_level(PWM4_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM5_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM6_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM7_GPIO_PIN, 0);
+            pwm_set_gpio_level(PWM8_GPIO_PIN, 0);
         }
         else if(ui == 0xDEAD) {
             vtc_offset_sweep();
@@ -298,12 +318,12 @@ int main(void) {
 
     capstone_pwm_init();
     printf("Hello Capstone World!\n");
-
-    i2c_init(i2c_default, 100 * 1000);
-    gpio_set_function(PMIC_I2C_SDA_PIN, GPIO_FUNC_I2C);
-    gpio_set_function(PMIC_I2C_SCL_PIN, GPIO_FUNC_I2C);
-    gpio_pull_up(PMIC_I2C_SDA_PIN);
-    gpio_pull_up(PMIC_I2C_SCL_PIN);
+//
+//    i2c_init(i2c_default, 100 * 1000);
+//    gpio_set_function(PMIC_I2C_SDA_PIN, GPIO_FUNC_I2C);
+//    gpio_set_function(PMIC_I2C_SCL_PIN, GPIO_FUNC_I2C);
+//    gpio_pull_up(PMIC_I2C_SDA_PIN);
+//    gpio_pull_up(PMIC_I2C_SCL_PIN);
 
     W25_Init();
 

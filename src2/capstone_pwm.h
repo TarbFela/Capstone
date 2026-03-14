@@ -13,6 +13,11 @@
 #define PWM3_GPIO_PIN 2
 #define PWM4_GPIO_PIN 3
 
+#define PWM5_GPIO_PIN 4
+#define PWM6_GPIO_PIN 5
+#define PWM7_GPIO_PIN 6
+#define PWM8_GPIO_PIN 7
+
 #define capstone_pwm_set_hi_level(d) pwm_set_gpio_level(PWM1_GPIO_PIN,d);pwm_set_gpio_level(PWM3_GPIO_PIN,d);
 #define capstone_pwm_set_lo_level(d) pwm_set_gpio_level(PWM2_GPIO_PIN,d);pwm_set_gpio_level(PWM4_GPIO_PIN,d);
 
