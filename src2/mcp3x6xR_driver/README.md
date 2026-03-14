@@ -1,9 +1,11 @@
 # MCP3x6xR Driver for RP2040/RP2350 [WIP]
-
 This is a simple driver for the MCP3x6xR series ADCs that I will employ in my capstone project. They are SPI devices and I am using RP2350-based boards (namely, the Pimoroni PGA2350).
 
-## Structure
+### Annoying, Sneaky Hardware Requirement
+This series of ADCs seems to _require_ that the nIRQ pin be pulled to logic high externally. 
+Without this step, the **ADC WILL NOT PERFORM CONVERSIONS**.
 
+## Structure
 This is a work in progress. I am still sorting out how best to define the types and how to structure functions, etc.
 
 I perused the datasheet and wrote defines for a bunch of registers, addresses, etc based on information found therein. While some industry-standard headers (such as those from Raspberry Pi in their hardware/regs headers) use a structure wherein masks, LSB & MSB, and some values are provided for register fields, I am instead opting to provide OR-able field values. For example, in order to construct a value to be written to configuration register 0, you would simply:
