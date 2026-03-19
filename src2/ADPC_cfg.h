@@ -1,5 +1,15 @@
 // Pin definitions for the ADPC-001 board (motherboard) using the Pimoroni PGA2350 daughter board
 
+#include "hardware/spi.h"
+#include "hardware/i2c.h"
+
+// 16-bit MCP3462R ADC: performs ISNS
+#define ADC_0_PIN_MOSI      3
+#define ADC_0_PIN_MISO      0
+#define ADC_0_PIN_CS        5
+#define ADC_0_PIN_SCK       6
+#define ADC_0_SPI           spi0
+
 // 24-bit MCP3562R ADC: performs TSNS and VSNS functionalitites
 #define ADC_1_PIN_MOSI      11
 #define ADC_1_PIN_MISO      12
@@ -14,3 +24,11 @@
 #define PGIA_PIN_CS         7
 #define PGIA_PIN_SCK        ADC_1_PIN_SCK
 #define PGIA_SPI            ADC_1_SPI
+
+#define PGIA_PIN_GPIO3_FAULT 8
+#define PGIA_PIN_GPIO2_CALIB 4
+
+// MCP9808 I2C temperature sensor
+#define TMP_SNS_SDA 10
+#define TMP_SNS_SCL 15
+#define TMP_SNS_I2C i2c1
