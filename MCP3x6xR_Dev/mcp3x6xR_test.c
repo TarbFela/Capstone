@@ -6,16 +6,67 @@
 #include "hardware/spi.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
+#include "hardware/pio.h"
 #include "pico/multicore.h"
+
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "../src2/ADPC_cfg.h"
+#include "mcp3x6xr_read.pio.h"
 
-volatile uint32_t adc_irq_counter = 0;
+//
+//volatile uint32_t adc_irq_counter = 0;
+//
+//void adc_gpio_irq_handler(uint gpio, uint32_t events) {
+//    adc_irq_counter++;
+//    printf("\t\tIRQ\n");
+//}
 
-void adc_gpio_irq_handler(uint gpio, uint32_t events) {
-    adc_irq_counter++;
-    printf("\t\tIRQ\n");
+void mcp3x6xr_pio_init(PIO pio, uint sm) {
+    // Load program
+    uint offset = pio_add_program(pio, &mcp3x6xr_read_program);
+
+    // --- Reassign pins from SPI → PIO ---
+    gpio_set_function(ADC_1_PIN_SCK,  PIO_FUNCSEL_NUM(pio, ADC_1_PIN_SCK));
+    gpio_set_function(ADC_1_PIN_MISO, PIO_FUNCSEL_NUM(pio, ADC_1_PIN_MISO));
+    gpio_set_function(ADC_1_PIN_IRQ,  GPIO_FUNC_SIO);  // stays as input for WAIT
+
+    // Ensure directions
+    gpio_set_dir(ADC_1_PIN_SCK, GPIO_OUT);
+    gpio_set_dir(ADC_1_PIN_MISO, GPIO_IN);
+    gpio_set_dir(ADC_1_PIN_IRQ, GPIO_IN);
+
+    // --- Config ---
+    pio_sm_config c = mcp3x6xr_read_program_get_default_config(offset);
+
+    // SCK via sideset
+    sm_config_set_sideset_pins(&c, ADC_1_PIN_SCK);
+
+    // MISO input
+    sm_config_set_in_pins(&c, ADC_1_PIN_MISO);
+
+    // IRQ pin for WAIT
+    sm_config_set_jmp_pin(&c, ADC_1_PIN_IRQ);
+
+    // Shift config: MSB-first, autopush at 32 bits
+    sm_config_set_in_shift(&c,
+                           true,   // shift right
+                           true,   // autopush
+                           32
+    );
+
+    // Clock divider (adjust to meet ADC timing)
+    sm_config_set_clkdiv(&c, 4.0f);
+
+    // Init SM
+    pio_sm_init(pio, sm, offset, &c);
+
+    // Set pin directions inside PIO
+    pio_sm_set_consecutive_pindirs(pio, sm, ADC_1_PIN_SCK, 1, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, ADC_1_PIN_MISO, 1, false);
+
+    // Start
+    pio_sm_set_enabled(pio, sm, true);
 }
 
 int main() {
@@ -30,7 +81,7 @@ int main() {
 
     gpio_disable_pulls(ADC_1_PIN_IRQ);
     gpio_init(ADC_1_PIN_IRQ);
-    gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
+
 
 
     // wait for user input.

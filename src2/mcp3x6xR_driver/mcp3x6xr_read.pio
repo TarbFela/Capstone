@@ -1,0 +1,18 @@
+.program mcp3x6xr_read
+.side_set 1 opt
+
+.wrap_target
+    wait 0 pin 0        ; ensure fresh edge
+    wait 1 pin 0        ; wait for IRQ rising edge
+
+    set x, 31           ; 32-bit transfer
+
+bitloop:
+    nop        side 0   ; SCK low
+    nop        side 1   ; SCK high
+    in pins, 1          ; sample MISO
+    jmp x-- bitloop
+
+    push block          ; push to FIFO → DREQ
+
+.wrap
