@@ -4,10 +4,19 @@
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/spi.h"
+#include "hardware/irq.h"
+#include "hardware/gpio.h"
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "../src2/ADPC_cfg.h"
+
+volatile uint32_t adc_irq_counter = 0;
+
+void adc_gpio_irq_handler(uint gpio, uint32_t events) {
+    adc_irq_counter++;
+    printf("\t\tIRQ\n");
+}
 
 int main() {
     stdio_init_all();
@@ -18,6 +27,11 @@ int main() {
         tx[i] = 0;
         rx[i] = 0;
     }
+
+    gpio_disable_pulls(ADC_1_PIN_IRQ);
+    gpio_init(ADC_1_PIN_IRQ);
+    gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
+
 
     // wait for user input.
     scanf(" %c",ui);
@@ -78,9 +92,12 @@ int main() {
         rx[i] = 0;
     }
 
+
+
 sample:
     // write ADC mode
     printf("Writing Config Registers\n");
+
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
     tx[1] = 0xE3;
     gpio_put(13,0); sleep_us(100);
@@ -104,7 +121,7 @@ sample:
         sleep_us(100);
         gpio_put(13, 1);
         printf("[%02X] ",rx[0]);
-        if(rx[0] == 0x13) {
+        if((rx[0]&MCP_STAT_nDR_STATUS_MASK) == 0) {
             printf("\nConversion Ready. Reading ADC_DATA register.\n");
             tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_ADCDATA);
             gpio_put(13,0); sleep_us(100);
@@ -114,6 +131,9 @@ sample:
             break;
         }
     }
+
+
+
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
     scanf(" %c",ui);
