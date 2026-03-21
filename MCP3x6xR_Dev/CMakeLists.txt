@@ -22,7 +22,7 @@ add_executable(mcp3x6xR_dev
 		mcp3x6xR_driver/mcp3x6xR.c
 )
 
-pico_generate_pio_header(mcp3x6xR_dev ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp3x6xr_read.pio)
+#pico_generate_pio_header(mcp3x6xR_dev ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp3x6xr_read.pio)
 
 target_include_directories(mcp3x6xR_dev
     PUBLIC
