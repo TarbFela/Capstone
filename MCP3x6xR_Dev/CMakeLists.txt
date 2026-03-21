@@ -28,6 +28,7 @@ target_include_directories(mcp3x6xR_dev
 target_link_libraries(mcp3x6xR_dev
 		pico_stdlib
 		hardware_spi
+		hardware_i2c
 		hardware_gpio
 		hardware_pwm
 		pico_bootrom

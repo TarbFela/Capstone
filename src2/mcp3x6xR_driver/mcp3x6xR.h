@@ -107,7 +107,9 @@
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY 0x2<<6
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_SHTDWN 0x0
 
-/* bit 5-4 DATA_FORMAT[1:0]: ADC Output Data Format Selection
+
+/* **SPECIFIC TO 24-bit ADC (MCP356xR)!!**
+ * bit 5-4 DATA_FORMAT[1:0]: ADC Output Data Format Selection
     * 11 = 32-bit (25-bit right justified data + Channel ID): CHID[3:0] + SGN extension (4 bits) + 24-bit ADC
     * data. It allows overrange with the SGN extension.
     * 10 = 32-bit (25-bit right justified data): SGN extension (8-bit) + 24-bit ADC data. It allows overrange with
@@ -117,10 +119,10 @@
     * 00 = 24-bit (default ADC coding): 24-bit ADC data. It does not allow overrange (ADC code locked to
     * 0xFFFFFF or 0x800000).
     */
-#define MCP_CFG3_DATA_FORMAT_CHID_SGN4_24 0x3<<4
-#define MCP_CFG3_DATA_FORMAT_SNG8 0x2<<4
-#define MCP_CFG3_DATA_FORMAT_LJ32 0x1<<4
-#define MCP_CFG3_DATA_FORMAT_24 0x0
+#define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 0x3<<4
+#define MCP5_CFG3_DATA_FORMAT_32_SGN 0x2<<4
+#define MCP5_CFG3_DATA_FORMAT_32_LJ 0x1<<4
+#define MCP5_CFG3_DATA_FORMAT_24 0x0
 
 /* bit 3 CRC_FORMAT: CRC Checksum Format Selection on Read Communications
     * (it does not affect CRCCFG coding)

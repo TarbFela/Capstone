@@ -15,6 +15,7 @@
 #define ADC_1_PIN_MISO      12
 #define ADC_1_PIN_CS        13
 #define ADC_1_PIN_SCK       14
+#define ADC_1_PIN_IRQ       9
 #define ADC_1_SPI           spi1
 
 // ADA4255 programmable-gain instrumentation amplifier: TSNS amplifier

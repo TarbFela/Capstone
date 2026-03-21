@@ -30,7 +30,7 @@ int main() {
 
     gpio_disable_pulls(ADC_1_PIN_IRQ);
     gpio_init(ADC_1_PIN_IRQ);
-    gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
+    //gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
 
 
     // wait for user input.
@@ -58,7 +58,7 @@ int main() {
     tx[1] = 0xE2;
     tx[2] = 0x0C;
     tx[3] = 0x8B;
-    tx[4] = 0x80;
+    tx[4] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN;
     gpio_put(13,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 5);
     sleep_us(100); gpio_put(13,1);
@@ -82,7 +82,7 @@ int main() {
     // write MUX
     printf("Writing MUX settings\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
-    tx[1] = 0x01;
+    tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
     gpio_put(13,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 2);
     sleep_us(100); gpio_put(13,1);
@@ -93,47 +93,59 @@ int main() {
     }
 
 
-
+    uint32_t adc_data[256];
 sample:
+    // clear samples
+    for(int i = 0; i<256; i++) adc_data[i] = 0;
     // write ADC mode
     printf("Writing Config Registers\n");
-
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
-    tx[1] = 0xE3;
-    gpio_put(13,0); sleep_us(100);
+    tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_CONV;
+    gpio_put(13,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
-    sleep_us(100); gpio_put(13,1);
-    for(int i = 0; i<1; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
-    for(int i =0; i<16; i++) {
-        tx[i] = 0;
-        rx[i] = 0;
+    sleep_us(5); gpio_put(13,1);
+//    for(int i = 0; i<1; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
+//    for(int i =0; i<16; i++) {
+//        tx[i] = 0;
+//        rx[i] = 0;
+//    }
+//
+    // prepare to perform static read of ADC register
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
+    // wait for first IRQ
+    while(!gpio_get(ADC_1_PIN_IRQ));
+
+    gpio_put(13,0); sleep_us(5);
+    spi_write_blocking(spi1, tx, 1);
+    spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[0]),4);
+    //sleep_us(5); gpio_put(13,1);
+    //for(int i = 0; i<4; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
+    for(int sample_i = 1; sample_i<100;sample_i++) {
+        while (!gpio_get(ADC_1_PIN_IRQ));
+        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+3,1);
+        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+2,1);
+        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+1,1);
+        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i]),1);
     }
-    // read the status a couple times or until we get some data ready.
+    sleep_us(5); gpio_put(13,1);
 
+    // stop the ADC.
+    printf("Writing Config Registers\n");
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
+    tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY;
+    gpio_put(13,0); sleep_us(5);
+    spi_write_read_blocking(spi1, tx, rx, 2);
+    sleep_us(5); gpio_put(13,1);
 
-    printf("Reading status.\n");
-    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_DUMMY;
+    printf("Samples:\n");
     for(int i = 0; i<100; i++) {
-        rx[0] = 0;
-        gpio_put(13, 0);
-        sleep_us(100);
-        spi_write_read_blocking(spi1, tx, rx, 1);
-        sleep_us(100);
-        gpio_put(13, 1);
-        printf("[%02X] ",rx[0]);
-        if((rx[0]&MCP_STAT_nDR_STATUS_MASK) == 0) {
-            printf("\nConversion Ready. Reading ADC_DATA register.\n");
-            tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_ADCDATA);
-            gpio_put(13,0); sleep_us(100);
-            spi_write_read_blocking(spi1, tx, rx, 3);
-            sleep_us(100); gpio_put(13,1);
-            for(int i = 0; i<3; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
-            break;
-        }
+        printf("%10ld [0x%02X] [0x%02X] [0x%02X] [0x%02X]\n",
+               adc_data[i],
+               ((uint8_t *)(adc_data))[4*i + 0],
+               ((uint8_t *)(adc_data))[4*i + 1],
+               ((uint8_t *)(adc_data))[4*i + 2],
+               ((uint8_t *)(adc_data))[4*i + 3]);
     }
-
-
-
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
     scanf(" %c",ui);
