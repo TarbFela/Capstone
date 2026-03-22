@@ -20,17 +20,25 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     gpio_put(cs_pin, MCP_CS_DESELECT);
     gpio_set_dir(cs_pin, GPIO_OUT);
 
+    printf(".");
+
     spi_init(spi, 80*1000); // 80kHz
+    printf(".");
     // drive device in 0,0 mode
-    spi_set_format(s->spi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    spi_set_format(spi, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    printf(".");
     gpio_set_function(sck_pin,GPIO_FUNC_SPI);
+    printf(".");
     gpio_set_function(mosi_pin,GPIO_FUNC_SPI);
+    printf(".");
     gpio_set_function(miso_pin,GPIO_FUNC_SPI);
+    printf(".");
 
     s->cs = cs_pin;
     s->miso = miso_pin;
     s->mosi = mosi_pin;
     s->sck = sck_pin;
+    printf(".");
 
     return 0;
 }

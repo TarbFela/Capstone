@@ -9,7 +9,14 @@
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
-#include "../src2/ADPC_cfg.h"
+//#include "../src2/ADPC_cfg.h"
+#define ADC_1_PIN_MOSI      11
+#define ADC_1_PIN_MISO      12
+#define ADC_1_PIN_CS        13
+#define ADC_1_PIN_SCK       10
+#define ADC_1_PIN_IRQ       15
+#define ADC_1_SPI           spi1
+
 
 volatile uint32_t adc_irq_counter = 0;
 
@@ -28,6 +35,9 @@ int main() {
         rx[i] = 0;
     }
 
+    sleep_ms(5000);
+    printf("SLEPT!\n");
+
     gpio_disable_pulls(ADC_1_PIN_IRQ);
     gpio_init(ADC_1_PIN_IRQ);
     //gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
@@ -35,8 +45,8 @@ int main() {
 
     // wait for user input.
     scanf(" %c",ui);
-    mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
-    printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
+    mcp_spi_init(&mcp, spi1, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
+    //printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
 
     printf("provide a character to continue...\n");
     scanf(" %c",ui);
