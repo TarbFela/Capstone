@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/spi.h"
+#include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
 #include "pico/multicore.h"
@@ -27,6 +28,9 @@ void dma_irq_handler(void) {
     dma_done = 1;
     mcp_pio_stop(&mpio);
     printf("DMA DONE!!\n");
+
+    // clear the correct interrupt
+    dma_hw->ints0 = 0x1 << (mpio.dma);
 }
 
 int main() {
@@ -142,7 +146,7 @@ sample:
             goto reboot;
         }
         if(dma_done) break;
-        sleep_ms(10);
+        sleep_ms(50);
     }
 
     sleep_us(5); gpio_put(13,1);
