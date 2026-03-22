@@ -428,12 +428,13 @@ typedef struct {
 } mcp_config_t;
 
 // TODO: write the config struct and functions.
-typedef struct mcp_info {
+typedef struct mcp_info_t {
     spi_inst_t *spi;
     int cs;
     int miso;
     int mosi;
     int sck;
+    int nirq;
     mcp_config_t cfg;
 } mcp_info_t;
 
@@ -441,7 +442,7 @@ typedef struct mcp_info {
 
 
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin);
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin);
 
 mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n);
 

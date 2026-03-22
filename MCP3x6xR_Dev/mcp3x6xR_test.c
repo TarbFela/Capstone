@@ -4,6 +4,7 @@
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 #include "hardware/spi.h"
+#include "hardware/dma.h"
 #include "hardware/irq.h"
 #include "hardware/gpio.h"
 #include "pico/multicore.h"
@@ -17,12 +18,25 @@
 #define ADC_1_PIN_IRQ       15
 #define ADC_1_SPI           spi1
 
+#include "mcp_pio.h"
 
-volatile uint32_t adc_irq_counter = 0;
+//volatile uint32_t adc_irq_counter = 0;
+//
+//void adc_gpio_irq_handler(uint gpio, uint32_t events) {
+//    adc_irq_counter++;
+//    printf("\t\tIRQ\n");
+//}
 
-void adc_gpio_irq_handler(uint gpio, uint32_t events) {
-    adc_irq_counter++;
-    printf("\t\tIRQ\n");
+mcp_pio_t mpio;
+
+volatile int dma_done = 0;
+void dma_irq_handler(void) {
+    dma_done = 1;
+    mcp_pio_stop(&mpio);
+    printf("DMA DONE!!\n");
+
+    // clear the correct interrupt
+    dma_hw->ints0 = 0x1 << (mpio.dma);
 }
 
 int main() {
@@ -35,9 +49,6 @@ int main() {
         rx[i] = 0;
     }
 
-    sleep_ms(5000);
-    printf("SLEPT!\n");
-
     gpio_disable_pulls(ADC_1_PIN_IRQ);
     gpio_init(ADC_1_PIN_IRQ);
     //gpio_set_irq_enabled_with_callback(ADC_1_PIN_IRQ, GPIO_IRQ_EDGE_FALL, true, &adc_gpio_irq_handler);
@@ -45,8 +56,12 @@ int main() {
 
     // wait for user input.
     scanf(" %c",ui);
-    mcp_spi_init(&mcp, spi1, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
-    //printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
+    printf("INITIALIZING...\n");
+    mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK,ADC_1_PIN_IRQ);
+    printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
+
+    uint32_t dma_buff[100];
+    mcp_pio_init(&mpio, &mcp, dma_buff, dma_irq_handler);
 
     printf("provide a character to continue...\n");
     scanf(" %c",ui);
@@ -127,16 +142,19 @@ sample:
 
     gpio_put(13,0); sleep_us(5);
     spi_write_blocking(spi1, tx, 1);
-    spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[0]),4);
-    //sleep_us(5); gpio_put(13,1);
-    //for(int i = 0; i<4; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
-    for(int sample_i = 1; sample_i<100;sample_i++) {
-        while (!gpio_get(ADC_1_PIN_IRQ));
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+3,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+2,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+1,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i]),1);
+
+    mcp_pio_start(&mpio);
+
+    int ti = 0;
+    while(1) {
+        if((ti++) > 100) {
+            printf("TIMEOUT.\n");
+            goto reboot;
+        }
+        if(dma_done) break;
+        sleep_ms(50);
     }
+
     sleep_us(5); gpio_put(13,1);
 
     // stop the ADC.
@@ -149,12 +167,7 @@ sample:
 
     printf("Samples:\n");
     for(int i = 0; i<100; i++) {
-        printf("%10ld [0x%02X] [0x%02X] [0x%02X] [0x%02X]\n",
-               adc_data[i],
-               ((uint8_t *)(adc_data))[4*i + 0],
-               ((uint8_t *)(adc_data))[4*i + 1],
-               ((uint8_t *)(adc_data))[4*i + 2],
-               ((uint8_t *)(adc_data))[4*i + 3]);
+        printf("%10ld\n",mpio.buff[i]);
     }
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
