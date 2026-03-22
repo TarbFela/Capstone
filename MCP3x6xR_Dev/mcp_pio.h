@@ -1,0 +1,21 @@
+#ifndef MCP_PIO_H
+#define MCP_PIO_H
+
+#include "hardware/pio.h"
+#include "hardware/gpio.h"
+
+#include "mcp3x6xR_driver/mcp3x6xR.h"
+
+typedef struct mcp_pio_t {
+    PIO pio;
+    uint sm;
+    mcp_info_t *mcp_info;
+    uint dma;
+    uint32_t *buff;
+} mcp_pio_t;
+
+void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma_handler)(void));
+void mcp_pio_start(mcp_pio_t *s);
+void mcp_pio_stop(mcp_pio_t *s);
+
+#endif
