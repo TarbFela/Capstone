@@ -26,6 +26,7 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
                                  1 << (mcp->sck),
                                  (1 << (mcp->sck)) | (1 << (mcp->miso)) | (1 << (mcp->nirq))
     );
+
     pio_sm_init(pio, sm, offset, &c);
 
     uint dma = dma_claim_unused_channel(true);

@@ -26,6 +26,7 @@ volatile int dma_done = 0;
 void dma_irq_handler(void) {
     dma_done = 1;
     mcp_pio_stop(&mpio);
+    printf("DMA DONE!!\n");
 }
 
 int main() {
@@ -131,16 +132,19 @@ sample:
 
     gpio_put(13,0); sleep_us(5);
     spi_write_blocking(spi1, tx, 1);
-    spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[0]),4);
-    //sleep_us(5); gpio_put(13,1);
-    //for(int i = 0; i<4; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
-    for(int sample_i = 1; sample_i<100;sample_i++) {
-        while (!gpio_get(ADC_1_PIN_IRQ));
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+3,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+2,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i])+1,1);
-        spi_read_blocking(ADC_1_SPI,0x00,(uint8_t *)(&adc_data[sample_i]),1);
+
+    mcp_pio_start(&mpio);
+
+    int ti = 0;
+    while(1) {
+        if((ti++) > 100) {
+            printf("TIMEOUT.\n");
+            goto reboot;
+        }
+        if(dma_done) break;
+        sleep_ms(10);
     }
+
     sleep_us(5); gpio_put(13,1);
 
     // stop the ADC.
@@ -153,12 +157,7 @@ sample:
 
     printf("Samples:\n");
     for(int i = 0; i<100; i++) {
-        printf("%10ld [0x%02X] [0x%02X] [0x%02X] [0x%02X]\n",
-               adc_data[i],
-               ((uint8_t *)(adc_data))[4*i + 0],
-               ((uint8_t *)(adc_data))[4*i + 1],
-               ((uint8_t *)(adc_data))[4*i + 2],
-               ((uint8_t *)(adc_data))[4*i + 3]);
+        printf("%10ld\n",mpio.buff[i]);
     }
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
