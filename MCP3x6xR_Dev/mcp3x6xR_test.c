@@ -149,7 +149,8 @@ sample:
     while(1) {
         if((ti++) > 100) {
             printf("TIMEOUT.\n");
-            goto reboot;
+            mcp_pio_stop(&mpio);
+            break;
         }
         if(dma_done) break;
         sleep_ms(50);
@@ -164,6 +165,8 @@ sample:
     gpio_put(13,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
     sleep_us(5); gpio_put(13,1);
+
+    if(ti>100) goto reboot;
 
     printf("Samples:\n");
     for(int i = 0; i<100; i++) {
