@@ -11,11 +11,21 @@
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "../src2/ADPC_cfg.h"
 
-volatile uint32_t adc_irq_counter = 0;
+#include "mcp_pio.h"
 
-void adc_gpio_irq_handler(uint gpio, uint32_t events) {
-    adc_irq_counter++;
-    printf("\t\tIRQ\n");
+//volatile uint32_t adc_irq_counter = 0;
+//
+//void adc_gpio_irq_handler(uint gpio, uint32_t events) {
+//    adc_irq_counter++;
+//    printf("\t\tIRQ\n");
+//}
+
+mcp_pio_t mpio;
+
+volatile int dma_done = 0;
+void dma_irq_handler(void) {
+    dma_done = 1;
+    mcp_pio_stop(&mpio);
 }
 
 int main() {
@@ -35,8 +45,12 @@ int main() {
 
     // wait for user input.
     scanf(" %c",ui);
-    mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
+    printf("INITIALIZING...\n");
+    mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK,ADC_1_PIN_IRQ);
     printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
+
+    uint32_t dma_buff[100];
+    mcp_pio_init(&mpio, &mcp, dma_buff, dma_irq_handler);
 
     printf("provide a character to continue...\n");
     scanf(" %c",ui);

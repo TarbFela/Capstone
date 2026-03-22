@@ -13,27 +13,28 @@ set(PICO_BOARD pico2)
 # initialize the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-
-
 # rest of your project
 add_executable(mcp3x6xR_dev
 		mcp3x6xR_test.c
 	../src2/capstone_w25.c
 		mcp3x6xR_driver/mcp3x6xR.c
+		mcp_pio.c
 )
 
-#pico_generate_pio_header(mcp3x6xR_dev ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp3x6xr_read.pio)
+pico_generate_pio_header(mcp3x6xR_dev ${CMAKE_CURRENT_LIST_DIR}/mcp_pio.pio)
 
 target_include_directories(mcp3x6xR_dev
-    PUBLIC
-        ${CMAKE_CURRENT_LIST_DIR}/../
+		PUBLIC
+		${CMAKE_CURRENT_LIST_DIR}/../
 )
+
 
 target_link_libraries(mcp3x6xR_dev
 		pico_stdlib
-		hardware_pio
 		hardware_spi
+		hardware_dma
 		hardware_i2c
+		hardware_pio
 		hardware_gpio
 		hardware_pwm
 		pico_bootrom
