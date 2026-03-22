@@ -10,7 +10,13 @@
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
-#include "../src2/ADPC_cfg.h"
+//#include "../src2/ADPC_cfg.h"
+#define ADC_1_PIN_MOSI      11
+#define ADC_1_PIN_MISO      12
+#define ADC_1_PIN_CS        13
+#define ADC_1_PIN_SCK       10
+#define ADC_1_PIN_IRQ       15
+#define ADC_1_SPI           spi1
 
 #include "mcp_pio.h"
 
@@ -143,7 +149,8 @@ sample:
     while(1) {
         if((ti++) > 100) {
             printf("TIMEOUT.\n");
-            goto reboot;
+            mcp_pio_stop(&mpio);
+            break;
         }
         if(dma_done) break;
         sleep_ms(50);
@@ -158,6 +165,8 @@ sample:
     gpio_put(13,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
     sleep_us(5); gpio_put(13,1);
+
+    if(ti>100) goto reboot;
 
     printf("Samples:\n");
     for(int i = 0; i<100; i++) {
