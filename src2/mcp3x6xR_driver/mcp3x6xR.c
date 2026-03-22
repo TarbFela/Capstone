@@ -15,7 +15,7 @@
 #define MCP_CS_DESELECT 1
 #define MCP_CS_SELECT 0
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin) {
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin) {
     gpio_init(cs_pin);
     gpio_put(cs_pin, MCP_CS_DESELECT);
     gpio_set_dir(cs_pin, GPIO_OUT);
@@ -31,6 +31,7 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     s->miso = miso_pin;
     s->mosi = mosi_pin;
     s->sck = sck_pin;
+    s->nirq = nirq_pin;
 
     return 0;
 }
