@@ -33,10 +33,9 @@ volatile int dma_done = 0;
 void dma_irq_handler(void) {
     dma_done = 1;
     mcp_pio_stop(&mpio);
-    printf("DMA DONE!!\n");
-
     // clear the correct interrupt
     dma_hw->ints0 = 0x1 << (mpio.dma);
+    printf("DMA DONE!!\n");
 }
 
 int main() {
@@ -69,9 +68,9 @@ int main() {
     // read all config regs.
     printf("Reading Config Registers\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_CONFIG0);
-    gpio_put(13,0); sleep_us(100);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 5);
-    sleep_us(100); gpio_put(13,1);
+    sleep_us(100); gpio_put(ADC_1_PIN_CS,1);
     for(int i = 0; i<5; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
 
     printf("provide a character to continue...\n");
@@ -84,9 +83,9 @@ int main() {
     tx[2] = 0x0C;
     tx[3] = 0x8B;
     tx[4] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN;
-    gpio_put(13,0); sleep_us(100);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 5);
-    sleep_us(100); gpio_put(13,1);
+    sleep_us(100); gpio_put(ADC_1_PIN_CS,1);
     for(int i = 0; i<1; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
     for(int i =0; i<16; i++) {
         tx[i] = 0;
@@ -99,18 +98,18 @@ int main() {
     // read all config regs again
     printf("Reading Config Registers\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_CONFIG0);
-    gpio_put(13,0); sleep_us(100);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 5);
-    sleep_us(100); gpio_put(13,1);
+    sleep_us(100); gpio_put(ADC_1_PIN_CS,1);
     for(int i = 0; i<5; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
 
     // write MUX
     printf("Writing MUX settings\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
     tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
-    gpio_put(13,0); sleep_us(100);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 2);
-    sleep_us(100); gpio_put(13,1);
+    sleep_us(100); gpio_put(ADC_1_PIN_CS,1);
     for(int i = 0; i<1; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
     for(int i =0; i<16; i++) {
         tx[i] = 0;
@@ -126,9 +125,9 @@ sample:
     printf("Writing Config Registers\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
     tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_CONV;
-    gpio_put(13,0); sleep_us(5);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
-    sleep_us(5); gpio_put(13,1);
+    sleep_us(5); gpio_put(ADC_1_PIN_CS,1);
 //    for(int i = 0; i<1; i++) {printf("RX[%d]: 0x%02X\n",i,rx[i]);}
 //    for(int i =0; i<16; i++) {
 //        tx[i] = 0;
@@ -140,12 +139,13 @@ sample:
     // wait for first IRQ
     while(!gpio_get(ADC_1_PIN_IRQ));
 
-    gpio_put(13,0); sleep_us(5);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
     spi_write_blocking(spi1, tx, 1);
 
     mcp_pio_start(&mpio);
 
     int ti = 0;
+    dma_done = 0;
     while(1) {
         if((ti++) > 100) {
             printf("TIMEOUT.\n");
@@ -156,22 +156,26 @@ sample:
         sleep_ms(50);
     }
 
-    sleep_us(5); gpio_put(13,1);
+    sleep_us(5); gpio_put(ADC_1_PIN_CS,1);
 
     // stop the ADC.
     printf("Writing Config Registers\n");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
     tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY;
-    gpio_put(13,0); sleep_us(5);
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
-    sleep_us(5); gpio_put(13,1);
+    sleep_us(5); gpio_put(ADC_1_PIN_CS,1);
 
     if(ti>100) goto reboot;
 
     printf("Samples:\n");
     for(int i = 0; i<100; i++) {
-        printf("%10ld\n",mpio.buff[i]);
+        printf("%10ld\t",mpio.buff[i]);
+        if((i%4)==3) printf("\n");
     }
+    printf( "GPIO NIRQ DIRECTION: %s\n"
+            ,gpio_get_dir(ADC_1_PIN_IRQ) ? "OUT" : "IN"
+            );
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
     scanf(" %c",ui);
