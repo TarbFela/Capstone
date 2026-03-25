@@ -12,6 +12,7 @@
 .wrap_target
 public entry_point:
     set x, 31           side 0       ; 32 bits
+    wait 1 jmppin       side 0       ; wait nIRQ hi jmp_pin
     wait 0 jmppin       side 0 [1]   ; wait nIRQ low jmp_pin
 bitloop:
     nop                 side 1 [1]   ; SCK high

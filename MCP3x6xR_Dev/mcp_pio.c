@@ -29,19 +29,38 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
 
     pio_sm_init(pio, sm, offset, &c);
 
-    uint dma = dma_claim_unused_channel(true);
-    dma_channel_config dc = dma_channel_get_default_config(dma);
-    channel_config_set_transfer_data_size(&dc, DMA_SIZE_32);
-    channel_config_set_read_increment(&dc, false);
-    channel_config_set_write_increment(&dc, true);
+    uint dma_a = dma_claim_unused_channel(true);
+    uint dma_b = dma_claim_unused_channel(true);
+
+    // TODO: FINISH THE DAISY CHAIN CODE!! THIS IS NOT FUNCTIONAL OR COMPLETE CURRENTLY!!!
+    dma_channel_config cfg_a = dma_channel_get_default_config(dma_a);
+    channel_config_set_transfer_data_size(&cfg_a, DMA_SIZE_32);
+    channel_config_set_read_increment(&cfg_a, false);
+    channel_config_set_write_increment(&cfg_a, true);
     //dma_channel_set_transfer_count(&dc,100,false);
-    channel_config_set_dreq(&dc, pio_get_dreq(pio,sm,false));
+    channel_config_set_dreq(&cfg_a, pio_get_dreq(pio,sm,false));
+    channel_config_set_chain_to(&cfg_a,dma_b);
     dma_channel_configure(
-            dma, &dc, sample_buff,
+            dma_a, &cfg_a, sample_buff,
             &pio->rxf[sm],
             100, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
             false
             );
+
+
+    dma_channel_config cfg_b = dma_channel_get_default_config(dma_b);
+    channel_config_set_transfer_data_size(&cfg_b, DMA_SIZE_32);
+    channel_config_set_read_increment(&cfg_b, false);
+    channel_config_set_write_increment(&cfg_b, true);
+    //dma_channel_set_transfer_count(&dc,100,false);
+    channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
+    channel_config_set_chain_to(&cfg_b,dma_a);
+    dma_channel_configure(
+            dma_b, &cfg_b, sample_buff,
+            &pio->rxf[sm],
+            100, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
+            false
+    );
 
     irq_set_exclusive_handler(DMA_IRQ_0,dma_handler);
 
@@ -56,22 +75,22 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
  * Converts GPIO pins from SIO to PIO functionality, then starts the PIO.
  */
 void mcp_pio_start(mcp_pio_t *s) {
+    pio_sm_set_pindirs_with_mask(s->pio, s->sm,
+                                 1 << (s->mcp_info->sck),
+                                 (1 << (s->mcp_info->sck)) | (1 << (s->mcp_info->miso)) | (1 << (s->mcp_info->nirq))
+    );
     gpio_set_function(s->mcp_info->miso, GPIO_FUNC_PIO0);
     gpio_set_function(s->mcp_info->sck, GPIO_FUNC_PIO0);
     gpio_set_function(s->mcp_info->nirq, GPIO_FUNC_PIO0);
 
-//    pio_gpio_init(s->pio, s->mcp_info->miso);
-//    pio_gpio_init(s->pio, s->mcp_info->sck);
-//    pio_gpio_init(s->pio, s->mcp_info->nirq);
-//
-//    pio_sm_config c = pio_get_default_sm_config();
-//    sm_config_set_sideset_pins(&c, s->mcp_info->sck);
-//    sm_config_set_in_pins(&c, s->mcp_info->miso);
-//    sm_config_set_jmp_pin(&c, s->mcp_info->nirq);
+    pio_sm_restart(s->pio, s->sm);
+    pio_sm_clear_fifos(s->pio, s->sm);
 
     dma_channel_set_irq0_enabled(s->dma, true);
     irq_set_enabled(DMA_IRQ_0, true);
-    dma_channel_start(s->dma);
+    dma_channel_set_transfer_count(s->dma,100,false);
+    dma_channel_set_write_addr(s->dma,s->buff,true);
+
     pio_sm_set_enabled(s->pio, s->sm, true);
 }
 
@@ -80,12 +99,13 @@ void mcp_pio_start(mcp_pio_t *s) {
  */
 void mcp_pio_stop(mcp_pio_t *s) {
     pio_sm_set_enabled(s->pio, s->sm, false);
-
+    irq_set_enabled(DMA_IRQ_0, false);
     dma_channel_set_irq0_enabled(s->dma, false);
-    //dma_channel_acknowledge_irq0(s->dma);
     dma_channel_abort(s->dma);
+
+    pio_sm_set_pindirs_with_mask(s->pio, s->sm, 0,
+                                 (1 << s->mcp_info->sck) | (1 << s->mcp_info->miso) | (1 << s->mcp_info->nirq));
 
     gpio_set_function(s->mcp_info->miso, GPIO_FUNC_SPI);
     gpio_set_function(s->mcp_info->sck, GPIO_FUNC_SPI);
-    gpio_set_function(s->mcp_info->nirq, GPIO_FUNC_SPI);
 }
