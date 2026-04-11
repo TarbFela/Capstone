@@ -27,7 +27,7 @@ Let's talk a bit about the hardware tasks because those should probably be the s
 
 ## Coding
 
-### Git: Best Practices
+### Getting the code and prepping the space.
 
 You can get the code I've started by doing:
 
@@ -62,6 +62,26 @@ Once this is done you should be all set to compile the project (from the `build/
 Or remove all compiled files:
 
 `make clean`
+
+### Git
+
+When you make changes, do:
+
+`git commit <files> -m "<some comment>"`
+
+When uou make new files, you'll have to precede that with:
+
+`git add <files>`
+
+This makes it easy to undo changes or mix-and-match. Once you're set up with a Github account, you'll be able to:
+
+`git push origin main`
+
+Which saves those changes to the Github servers and allows me to retrieve them. **Also, regularly run**:
+
+`git pull`
+
+This pulls any changes I've pushed. If you don't do this you'll have to mess around with git's "merging" tool which can be a bit of a pain.
 
 ### Digital Inputs: A starting point
 
