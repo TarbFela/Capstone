@@ -26,7 +26,6 @@ int main(void) {
             char ui = (char)uii;
             // QUIT
             if (ui == 'q') break;
-            // HELP MENU
             else printf("Input recieved! [press q for BOOTSEL mode]\n");
         }
     }
