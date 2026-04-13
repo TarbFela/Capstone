@@ -9,6 +9,7 @@
 // size of each DMA's buffer.
 #define DMA_BUFF_SIZE 64
 
+// Globally-accessible array for MCP/SIO/DMA data (i.e. readings). Aligned for DMA Ring mode.
 extern uint32_t dma_buff[DMA_BUFF_SIZE*2];
 
 typedef struct mcp_pio_t {

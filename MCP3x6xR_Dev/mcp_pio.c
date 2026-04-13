@@ -6,7 +6,9 @@
 #include "mcp_pio.pio.h"
 
 
-uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE)));
+uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
+
+const uint32_t dma_buff_alignment_bytes = 31 - __builtin_clz(DMA_BUFF_SIZE*sizeof(uint32_t));
 
 /*
  * Expects GPIOs to be initialized for SPI and expects the mcp info struct to already be built up.
@@ -40,6 +42,9 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     channel_config_set_transfer_data_size(&cfg_a, DMA_SIZE_32);
     channel_config_set_read_increment(&cfg_a, false);
     channel_config_set_write_increment(&cfg_a, true);
+    channel_config_set_ring(&cfg_a, 1, dma_buff_alignment_bytes);
+
+
     //dma_channel_set_transfer_count(&dc,100,false);
     channel_config_set_dreq(&cfg_a, pio_get_dreq(pio,sm,false));
     channel_config_set_chain_to(&cfg_a,dma_b);
@@ -55,7 +60,8 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     channel_config_set_transfer_data_size(&cfg_b, DMA_SIZE_32);
     channel_config_set_read_increment(&cfg_b, false);
     channel_config_set_write_increment(&cfg_b, true);
-    //dma_channel_set_transfer_count(&dc,100,false);
+    channel_config_set_ring(&cfg_b, 1, dma_buff_alignment_bytes);
+
     channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
     channel_config_set_chain_to(&cfg_b,dma_a);
     dma_channel_configure(

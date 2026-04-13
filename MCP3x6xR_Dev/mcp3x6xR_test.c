@@ -38,11 +38,11 @@ void dma_irq_handler(void) {
     int culprit_is_a = dma_hw->ints0 & (1u << mpio.dma_a);
     if (culprit_is_a) {
         dma_hw->ints0 = 0x1 << (mpio.dma_a);
-        dma_hw->ch[mpio.dma_a].write_addr = (io_rw_32)mpio.buff;
+        //dma_hw->ch[mpio.dma_a].write_addr = (io_rw_32)mpio.buff;
     }
     else {
         dma_hw->ints0 = 0x1 << (mpio.dma_b);
-        dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + DMA_BUFF_SIZE);
+        //dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + DMA_BUFF_SIZE);
     }
     if(cc > 10) {
         mcp_pio_stop(&mpio);
@@ -201,6 +201,7 @@ sample:
         printf("%10ld\t",mpio.buff[i]);
         if((i%8)==7) printf("\t[%d]\n",i);
     }
+    printf("Write Addresses:\n0x%08X\n0x%08X\n",dma_hw->ch[mpio.dma_a].write_addr, dma_hw->ch[mpio.dma_b].write_addr);
 //    printf( "GPIO NIRQ DIRECTION: %s\n"
 //            ,gpio_get_dir(ADC_1_PIN_IRQ) ? "OUT" : "IN"
 //            );
