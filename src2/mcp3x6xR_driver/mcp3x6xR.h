@@ -456,7 +456,7 @@ typedef uint8_t mcp_status_t;
 
 // Just the cfg0..2 registers which should be written.
 typedef struct mcp_cfg_t {
-    uint8_t cfg[3];
+    uint8_t cfg[4];
 } mcp_cfg_t;
 
 // TODO: write the config struct and functions.

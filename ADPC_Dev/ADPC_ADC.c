@@ -1,7 +1,7 @@
 #include "ADPC_ADC.h"
-#include "../src2/ADPC_cfg.h"
-#include "mcp3x6xR_driver/mcp_pio.h"
-#include "mcp3x6xR_driver/mcp3x6xR.h"
+#include "ADPC_cfg.h"
+#include "../src2/mcp3x6xR_driver/mcp_pio.h"
+#include "../src2/mcp3x6xR_driver/mcp3x6xR.h"
 
 #include <stdio.h>
 
@@ -31,7 +31,7 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     }
 
     mcp_status_t status = mcp_configure( &mcp_1,
-MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY,
+MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL,
 MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256,
 MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1,
 MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN

@@ -45,13 +45,19 @@ mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cf
     if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
     if(status & MCP_STATUS_ERROR_FLAG) return status;
 
-    uint8_t rx[4];
+    uint8_t rx[5];
     status = mcp_read_regs(s, rx, 3, MCP_REG_ADDR_CONFIG0);
     if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
 
-    for(int i = 0; i<=3; i++) {
-        if(rx[i+1] != s->cfg.cfg[i]) return MCP_STATUS_WRITE_FAILED;
+    // check that config was written correctly.
+    if (    (rx[1] != s->cfg.cfg[0])
+        ||  (rx[2] != s->cfg.cfg[1])
+        ||  (rx[3] != s->cfg.cfg[2])
+        ||  (rx[4] != s->cfg.cfg[3])) {
+        return MCP_STATUS_WRITE_FAILED;
     }
+
+    return status;
 }
 
 

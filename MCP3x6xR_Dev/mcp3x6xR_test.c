@@ -10,7 +10,7 @@
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
-#include "../src2/ADPC_cfg.h"
+#include "../ADPC_Dev/ADPC_cfg.h"
 //#define ADC_1_PIN_MOSI      11
 //#define ADC_1_PIN_MISO      12
 //#define ADC_1_PIN_CS        13
@@ -20,7 +20,7 @@
 
 #include "mcp3x6xR_driver/mcp_pio.h"
 
-#include "ADPC_ADC.h"
+#include "../ADPC_Dev/ADPC_ADC.h"
 
 
 
