@@ -6,6 +6,11 @@
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 
+// size of each DMA's buffer.
+#define DMA_BUFF_SIZE 64
+
+extern uint32_t dma_buff[DMA_BUFF_SIZE*2];
+
 typedef struct mcp_pio_t {
     PIO pio;
     uint sm;

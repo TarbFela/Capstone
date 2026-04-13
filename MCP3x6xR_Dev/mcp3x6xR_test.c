@@ -29,6 +29,8 @@
 
 mcp_pio_t mpio;
 
+
+
 volatile int dma_done = 0;
 void dma_irq_handler(void) {
     static int cc = 0;
@@ -40,7 +42,7 @@ void dma_irq_handler(void) {
     }
     else {
         dma_hw->ints0 = 0x1 << (mpio.dma_b);
-        dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + 50);
+        dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + DMA_BUFF_SIZE);
     }
     if(cc > 10) {
         mcp_pio_stop(&mpio);
@@ -53,6 +55,9 @@ void dma_irq_handler(void) {
         cc++;
     }
 }
+
+
+
 
 int main() {
     stdio_init_all();
@@ -71,11 +76,15 @@ int main() {
 
     // wait for user input.
     scanf(" %c",ui);
+    printf("DMA BUFFER ALIGNMENT REPORT:\n"
+           "\t0x%08X\n",
+           (uint32_t)(&dma_buff[0])
+           );
+
     printf("INITIALIZING...\n");
     mcp_spi_init(&mcp, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK,ADC_1_PIN_IRQ);
     printf("MCP STRUCT:\n\tCS %d\n\tMOSI %d\n\tMISO %d\n\tSCK %d\n",mcp.cs,mcp.mosi,mcp.miso,mcp.sck);
 
-    uint32_t dma_buff[100];
     mcp_pio_init(&mpio, &mcp, dma_buff, dma_irq_handler);
 
     printf("provide a character to continue...\n");
@@ -188,9 +197,9 @@ sample:
     if(ti>100) goto reboot;
 
     printf("Samples:\n");
-    for(int i = 0; i<100; i++) {
+    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
         printf("%10ld\t",mpio.buff[i]);
-        if((i%4)==3) printf("\n");
+        if((i%8)==7) printf("\t[%d]\n",i);
     }
 //    printf( "GPIO NIRQ DIRECTION: %s\n"
 //            ,gpio_get_dir(ADC_1_PIN_IRQ) ? "OUT" : "IN"

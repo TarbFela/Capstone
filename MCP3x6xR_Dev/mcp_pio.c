@@ -5,6 +5,9 @@
 
 #include "mcp_pio.pio.h"
 
+
+uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE)));
+
 /*
  * Expects GPIOs to be initialized for SPI and expects the mcp info struct to already be built up.
  */
@@ -43,7 +46,7 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     dma_channel_configure(
             dma_a, &cfg_a, sample_buff,
             &pio->rxf[sm],
-            50, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
+            DMA_BUFF_SIZE,
             false
             );
 
@@ -56,9 +59,9 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
     channel_config_set_chain_to(&cfg_b,dma_a);
     dma_channel_configure(
-            dma_b, &cfg_b, sample_buff + 50,
+            dma_b, &cfg_b, sample_buff + DMA_BUFF_SIZE,
             &pio->rxf[sm],
-            50, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
+            DMA_BUFF_SIZE,
             false
     );
 
@@ -90,9 +93,9 @@ void mcp_pio_start(mcp_pio_t *s) {
     dma_channel_set_irq0_enabled(s->dma_a, true);
     dma_channel_set_irq0_enabled(s->dma_b, true);
     irq_set_enabled(DMA_IRQ_0, true);
-    dma_channel_set_transfer_count(s->dma_a,50,false);
-    dma_channel_set_transfer_count(s->dma_b,50,false);
-    dma_channel_set_write_addr(s->dma_b,s->buff + 50,false);
+    dma_channel_set_transfer_count(s->dma_a,DMA_BUFF_SIZE,false);
+    dma_channel_set_transfer_count(s->dma_b,DMA_BUFF_SIZE,false);
+    dma_channel_set_write_addr(s->dma_b,s->buff + DMA_BUFF_SIZE,false);
     dma_channel_set_write_addr(s->dma_a,s->buff,true);
 
     pio_sm_set_enabled(s->pio, s->sm, true);
