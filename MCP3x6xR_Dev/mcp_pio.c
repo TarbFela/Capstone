@@ -39,7 +39,7 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     channel_config_set_write_increment(&cfg_a, true);
     //dma_channel_set_transfer_count(&dc,100,false);
     channel_config_set_dreq(&cfg_a, pio_get_dreq(pio,sm,false));
-    channel_config_set_chain_to(&cfg_a,dma_b);
+//    channel_config_set_chain_to(&cfg_a,dma_b);
     dma_channel_configure(
             dma_a, &cfg_a, sample_buff,
             &pio->rxf[sm],
@@ -47,27 +47,27 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
             false
             );
 
-
-    dma_channel_config cfg_b = dma_channel_get_default_config(dma_b);
-    channel_config_set_transfer_data_size(&cfg_b, DMA_SIZE_32);
-    channel_config_set_read_increment(&cfg_b, false);
-    channel_config_set_write_increment(&cfg_b, true);
-    //dma_channel_set_transfer_count(&dc,100,false);
-    channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
-    channel_config_set_chain_to(&cfg_b,dma_a);
-    dma_channel_configure(
-            dma_b, &cfg_b, sample_buff,
-            &pio->rxf[sm],
-            100, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
-            false
-    );
+//
+//    dma_channel_config cfg_b = dma_channel_get_default_config(dma_b);
+//    channel_config_set_transfer_data_size(&cfg_b, DMA_SIZE_32);
+//    channel_config_set_read_increment(&cfg_b, false);
+//    channel_config_set_write_increment(&cfg_b, true);
+//    //dma_channel_set_transfer_count(&dc,100,false);
+//    channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
+//    channel_config_set_chain_to(&cfg_b,dma_a);
+//    dma_channel_configure(
+//            dma_b, &cfg_b, sample_buff,
+//            &pio->rxf[sm],
+//            100, // 100 samples TODO: daisychain your DMAs to continuously trigger DSP and read forever.
+//            false
+//    );
 
     irq_set_exclusive_handler(DMA_IRQ_0,dma_handler);
 
     s->pio = pio;
     s->sm = sm;
     s->mcp_info = mcp;
-    s->dma = dma;
+    s->dma = dma_a;
     s->buff = sample_buff;
 }
 

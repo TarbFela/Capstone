@@ -10,13 +10,13 @@
 #include "pico/multicore.h"
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
-//#include "../src2/ADPC_cfg.h"
-#define ADC_1_PIN_MOSI      11
-#define ADC_1_PIN_MISO      12
-#define ADC_1_PIN_CS        13
-#define ADC_1_PIN_SCK       10
-#define ADC_1_PIN_IRQ       15
-#define ADC_1_SPI           spi1
+#include "../src2/ADPC_cfg.h"
+//#define ADC_1_PIN_MOSI      11
+//#define ADC_1_PIN_MISO      12
+//#define ADC_1_PIN_CS        13
+//#define ADC_1_PIN_SCK       10
+//#define ADC_1_PIN_IRQ       15
+//#define ADC_1_SPI           spi1
 
 #include "mcp_pio.h"
 
@@ -134,15 +134,18 @@ sample:
 //        rx[i] = 0;
 //    }
 //
+    printf(".");
     // prepare to perform static read of ADC register
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
-    // wait for first IRQ
+    // wait for first IRQ pin signal
     while(!gpio_get(ADC_1_PIN_IRQ));
 
     gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
     spi_write_blocking(spi1, tx, 1);
+    printf(".");
 
     mcp_pio_start(&mpio);
+    printf(".");
 
     int ti = 0;
     dma_done = 0;
@@ -173,9 +176,9 @@ sample:
         printf("%10ld\t",mpio.buff[i]);
         if((i%4)==3) printf("\n");
     }
-    printf( "GPIO NIRQ DIRECTION: %s\n"
-            ,gpio_get_dir(ADC_1_PIN_IRQ) ? "OUT" : "IN"
-            );
+//    printf( "GPIO NIRQ DIRECTION: %s\n"
+//            ,gpio_get_dir(ADC_1_PIN_IRQ) ? "OUT" : "IN"
+//            );
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
     scanf(" %c",ui);
