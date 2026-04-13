@@ -310,6 +310,7 @@ bit 1-0 ADC_MODE[1:0]: ADC Operating Mode Selection
 01 = ADC Shutdown mode
 00 = ADC Shutdown mode (default)
 */
+#define MCP_CFG0_ADC_MODE_BITS      0x3
 #define MCP_CFG0_ADC_MODE_CONV      0x3
 #define MCP_CFG0_ADC_MODE_STDBY     0x2
 #define MCP_CFG0_ADC_MODE_SHTDWN    0x0
@@ -419,32 +420,44 @@ typedef enum mcp_mux_vals {
     MCP_MUX_VAL_CH0                 = 0x0}
     mcp_mux_vals_t;
 
+#define MCP_STATUS_ERROR_FLAG 0x80
 #define MCP_STATUS_BAD_INPUTS 0xFF
+#define MCP_STATUS_NO_CONNECTION 0xFE
+#define MCP_STATUS_WRITE_FAILED 0xFD
+
+/**
+ * A type which directly captures the MCP3x6xR STATUS byte (a bitfield) and additionally includes defines for more descriptive function returns (0xFF..0x80)
+ */
 typedef uint8_t mcp_status_t;
 
-// does nothing right now. Maybe will do something later.
-typedef struct {
-    uint8_t conv_mode; // continuous vs one-shot
-    uint8_t data_format;
-    uint8_t crc_format;
-    uint8_t crc_en;
-    uint8_t offset_cal_en;
-    uint8_t gain_cal_en;
-    uint8_t boost_current_sel;
-    uint8_t gain_sel;
-    uint8_t zero_mux_en;
-    uint8_t auto_zero_en;
-    uint8_t amclk_prescale;
-    uint8_t osr;
-    uint8_t vref_sel;
-    uint8_t partial_shutdown;
-    uint8_t clk_sel;
-    uint8_t bias_current_sel;
-    uint8_t adc_mode; //standby, shutdown, conversion
-    uint8_t input_mode; // mux or scan mode
-    uint16_t scan_mode_inputs[2];
-    uint8_t mux_mode_inputs[2];
-} mcp_config_t;
+//// does nothing right now. Maybe will do something later.
+//typedef struct {
+//    uint8_t conv_mode; // continuous vs one-shot
+//    uint8_t data_format;
+//    uint8_t crc_format;
+//    uint8_t crc_en;
+//    uint8_t offset_cal_en;
+//    uint8_t gain_cal_en;
+//    uint8_t boost_current_sel;
+//    uint8_t gain_sel;
+//    uint8_t zero_mux_en;
+//    uint8_t auto_zero_en;
+//    uint8_t amclk_prescale;
+//    uint8_t osr;
+//    uint8_t vref_sel;
+//    uint8_t partial_shutdown;
+//    uint8_t clk_sel;
+//    uint8_t bias_current_sel;
+//    uint8_t adc_mode; //standby, shutdown, conversion
+//    uint8_t input_mode; // mux or scan mode
+//    uint16_t scan_mode_inputs[2];
+//    uint8_t mux_mode_inputs[2];
+//} mcp_config_t;
+
+// Just the cfg0..2 registers which should be written.
+typedef struct mcp_cfg_t {
+    uint8_t cfg[3];
+} mcp_cfg_t;
 
 // TODO: write the config struct and functions.
 typedef struct mcp_info_t {
@@ -454,7 +467,7 @@ typedef struct mcp_info_t {
     int mosi;
     int sck;
     int nirq;
-    mcp_config_t cfg;
+    mcp_cfg_t cfg;
 } mcp_info_t;
 
 
@@ -463,14 +476,14 @@ typedef struct mcp_info_t {
 
 mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin);
 
-mcp_status_t mcp_read_cfgn(mcp_info_t *s, uint8_t *dst, int cfg_n);
-
-mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n);
 
 // NOTE: This is currently written for the MCP346xR, **NOT** the MCP356xR which has a 24-bit adc output.
 mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst);
 
 mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux_n);
+
+mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
+mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
 
 // ============================================================

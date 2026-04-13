@@ -33,6 +33,27 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
 }
 
 
+mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cfg2) {
+    // force no partial shutdown and standby mode.
+    s->cfg.cfg[0] = (cfg0 & ~MCP_CFG0_ADC_MODE_BITS) | MCP_CFG0_ADC_MODE_STDBY | MCP_CFG0_ADC_MODE_BITS;
+    s->cfg.cfg[0] = cfg1;
+    s->cfg.cfg[0] = cfg2;
+
+    mcp_status_t status;
+    status = mcp_write_regs(s, s->cfg.cfg, 3, MCP_REG_ADDR_CONFIG0);
+    if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
+    if(status & MCP_STATUS_ERROR_FLAG) return status;
+
+    uint8_t rx[4];
+    status = mcp_read_regs(s, rx, 3, MCP_REG_ADDR_CONFIG0);
+    if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
+
+    for(int i = 0; i<3; i++) {
+        if(rx[i+1] != s->cfg.cfg[i]) return MCP_STATUS_WRITE_FAILED;
+    }
+}
+
+
 mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr) {
     uint8_t cmd[2] = {MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(reg_addr)};
     uint8_t status = 0xFF;
@@ -180,7 +201,6 @@ mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux
 
     return rx[0];
 }
-
 
 
 // ============================================================
