@@ -18,7 +18,7 @@
 //#define ADC_1_PIN_IRQ       15
 //#define ADC_1_SPI           spi1
 
-#include "mcp_pio.h"
+#include "mcp3x6xR_driver/mcp_pio.h"
 
 //volatile uint32_t adc_irq_counter = 0;
 //
