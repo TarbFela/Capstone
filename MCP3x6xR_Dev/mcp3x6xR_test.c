@@ -28,17 +28,17 @@ volatile int dma_done = 0;
 void dma_irq_handler(void) {
     static int cc = 0;
     // clear the correct interrupt
-    int culprit_is_a = dma_hw->ints0 & (1u << mpio.dma_a);
+    int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
-        dma_hw->ints0 = 0x1 << (mpio.dma_a);
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_a);
         //dma_hw->ch[mpio.dma_a].write_addr = (io_rw_32)mpio.buff;
     }
     else {
-        dma_hw->ints0 = 0x1 << (mpio.dma_b);
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
         //dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + DMA_BUFF_SIZE);
     }
     if(cc > 10) {
-        mcp_pio_stop(&mpio);
+        mcp_pio_stop(&mpio_1);
         printf("DONE!\n");
         dma_done = 1;
         cc = 0;
