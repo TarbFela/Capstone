@@ -181,3 +181,73 @@ mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux
     return rx[0];
 }
 
+
+
+// ============================================================
+// Add these functions to mcp3x6xR.c
+// ============================================================
+
+// Internal helper: read a 24-bit register into a uint32_t.
+// The 3 register bytes are packed as [byte0<<16 | byte1<<8 | byte2].
+static mcp_status_t mcp_read_reg24(mcp_info_t *s, uint32_t *dst, int reg_addr) {
+    uint8_t buf[3] = {0, 0, 0};
+    mcp_status_t status = mcp_read_regs(s, buf, 3, reg_addr);
+    *dst = ((uint32_t)buf[0] << 16) | ((uint32_t)buf[1] << 8) | buf[2];
+    return status;
+}
+
+// Internal helper: write a uint32_t to a 24-bit register (uses only bits [23:0]).
+static mcp_status_t mcp_write_reg24(mcp_info_t *s, uint32_t val, int reg_addr) {
+    uint8_t buf[3] = {
+            (val >> 16) & 0xFF,
+            (val >>  8) & 0xFF,
+            (val      ) & 0xFF
+    };
+    return mcp_write_regs(s, buf, 3, reg_addr);
+}
+
+// Internal helper: read-modify-write a 24-bit register.
+// mask and val should both be in [23:0], already shifted to position.
+static mcp_status_t mcp_write_reg24_masked(mcp_info_t *s, uint32_t mask, uint32_t val, int reg_addr) {
+    if ((mask & val) != val) return MCP_STATUS_BAD_INPUTS;
+    uint32_t reg_val;
+    mcp_status_t status = mcp_read_reg24(s, &reg_val, reg_addr);
+    reg_val &= ~mask;
+    reg_val |=  val;
+    status = mcp_write_reg24(s, reg_val, reg_addr);
+    return status;
+}
+
+// Set the active SCAN channels via a bitmask of MCP_SCAN_SEL_BIT_* values.
+// Enables SCAN mode if any bit is set; passing 0 disables SCAN mode
+// and returns the device to MUX mode.
+// Does not disturb the DLY[2:0] field.
+mcp_status_t mcp_scan_set_channels(mcp_info_t *s, uint16_t channel_mask) {
+    return mcp_write_reg24_masked(s,
+                                  MCP_SCAN_CHANNEL_MASK,
+                                  (uint32_t)channel_mask,
+                                  MCP_REG_ADDR_SCAN
+    );
+}
+
+// Set the inter-conversion delay within a SCAN cycle (DLY[2:0], SCAN[23:21]).
+// delay_dly must be one of the MCP_SCAN_DLY_* macros (already shifted).
+// Does not disturb the channel selection bits.
+mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly) {
+    return mcp_write_reg24_masked(s,
+                                  MCP_SCAN_DLY_MASK,
+                                  delay_dly,
+                                  MCP_REG_ADDR_SCAN
+    );
+}
+
+// Set the delay between consecutive SCAN cycles (TIMER[23:0]).
+// timer_dmclk is a raw DMCLK period count: 0 = no delay, max = 0xFFFFFF.
+// When timer_dmclk > 256, the ADC enters shutdown between cycles (lower power);
+// when <= 256 it enters standby instead.
+// Only relevant in continuous conversion mode (CONV_MODE[1:0] = 11).
+mcp_status_t mcp_timer_set(mcp_info_t *s, uint32_t timer_dmclk) {
+    if (timer_dmclk > 0xFFFFFF) return MCP_STATUS_BAD_INPUTS;
+    return mcp_write_reg24(s, timer_dmclk, MCP_REG_ADDR_TIMER);
+}
+

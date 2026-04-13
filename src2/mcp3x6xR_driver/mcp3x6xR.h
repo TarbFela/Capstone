@@ -396,6 +396,11 @@ SCAN[n] Bit Channel Name                        Channel ID  MUX[7:0]    Correspo
 #define MCP_SCAN_DLY_256    (0x6 << 21)   // 256 DMCLK periods
 #define MCP_SCAN_DLY_512    (0x7 << 21)   // 512 DMCLK periods
 
+// Masks for the 24-bit SCAN register fields
+#define MCP_SCAN_DLY_MASK       (0x7u << 21)    // DLY[2:0] field, bits [23:21]
+#define MCP_SCAN_CHANNEL_MASK   (0xFFFFu)        // SCAN[15:0] channel bits
+
+
 typedef enum mcp_mux_vals {
     MCP_MUX_VAL_Int_VCM             = 0xF,
     MCP_MUX_VAL_Int_Temp_Diode_M    = 0xE,
@@ -466,5 +471,22 @@ mcp_status_t mcp_write_cfgn(mcp_info_t *s, uint8_t val, int cfg_n);
 mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst);
 
 mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux_n);
+
+
+// ============================================================
+// Add these declarations alongside the other mcp_* prototypes.
+// ============================================================
+
+// Set the active SCAN input channels. channel_mask is a bitmask of
+// MCP_SCAN_SEL_BIT_* values. Passing 0 disables SCAN mode (returns to MUX mode).
+mcp_status_t mcp_scan_set_channels(mcp_info_t *s, uint16_t channel_mask);
+
+// Set the delay between conversions within a SCAN cycle (DLY[2:0]).
+// delay_dly must be one of the MCP_SCAN_DLY_* values.
+mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly);
+
+// Set the delay between consecutive SCAN cycles (TIMER[23:0], in DMCLK periods).
+// 0 = no delay (default). Max = 0xFFFFFF.
+mcp_status_t mcp_timer_set(mcp_info_t *s, uint32_t timer_dmclk);
 
 #endif
