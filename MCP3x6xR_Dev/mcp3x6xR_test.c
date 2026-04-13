@@ -77,7 +77,7 @@ sample:
     }
     printf("Samples:\n");
     for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-        printf("%10ld\t",dma_buff);
+        printf("%10ld\t",dma_buff[i]);
         if((i%8)==7) printf("\t[%d]\n",i);
     }
 
