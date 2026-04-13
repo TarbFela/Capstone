@@ -9,6 +9,6 @@ extern mcp_info_t mcp;
 extern mcp_pio_t mpio;
 
 int adpc_adc_init(void (*dma_handler)(void));
-void adpc_adc_start();
+int adpc_adc_start();
 
 #endif

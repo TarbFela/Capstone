@@ -62,12 +62,22 @@ int main() {
     int as = adpc_adc_init(dma_irq_handler);
     if(as != 0) {
         printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
+        goto reboot;
     }
+
+    printf("[awaiting user input]\n");
+    scanf(" %c",ui);
+    printf("[input recieved]\n");
+    if(ui[0] == 'q') goto reboot;
+
 
 sample:
     dma_done = 0;
     int tii = 0;
-    adpc_adc_start();
+    if(adpc_adc_start() != 0) {
+        printf("ADPC START ERROR!\n");
+        goto reboot;
+    }
     while(!dma_done) {
         sleep_ms(20);
         if(tii++ > 100) {

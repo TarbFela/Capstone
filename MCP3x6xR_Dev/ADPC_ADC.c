@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 
+
 mcp_info_t mcp;
 mcp_pio_t mpio;
 
@@ -39,9 +40,9 @@ int adpc_adc_init(void (*dma_handler)(void)) {
 
     // write all config regs
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
-    tx[1] = 0xE2;
-    tx[2] = 0x0C;
-    tx[3] = 0x8B;
+    tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY;
+    tx[2] = MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256;
+    tx[3] = MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1;
     tx[4] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN;
     gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
     spi_write_read_blocking(spi1, tx, rx, 5);
@@ -58,12 +59,12 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     sleep_us(100); gpio_put(ADC_1_PIN_CS,1);
 
     // check that the write was performed correctly.
-    if (    (rx[1] != (MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0)))
-        &&  (rx[2] != 0x0C)
-        &&  (rx[3] != 0xE2)
-        &&  (rx[4] != 0x8B)
+    if (    (rx[1] != (MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY))
+        ||  (rx[2] != (MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256))
+        ||  (rx[3] != (MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1))
+        ||  (rx[4] != (MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN))
             ) return CONFIG_FAILED;
-    for(int i = 1; i<5; i++) printf("rx[%d] 0x%02X\n",i,rx[i]);
+    //for(int i = 1; i<5; i++) printf("rx[%d] 0x%02X\n",i,rx[i]);
 
     // write MUX
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
@@ -79,7 +80,8 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     return GOOD;
 }
 
-void adpc_adc_start() {
+// TODO: check communication somehow.
+int adpc_adc_start() {
     // write ADC mode
     uint8_t tx[2], rx[2];
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
@@ -87,13 +89,15 @@ void adpc_adc_start() {
     gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 2);
     sleep_us(5); gpio_put(ADC_1_PIN_CS,1);
+
     // prepare to perform static read of ADC register
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
     // wait for first IRQ pin signal
     while(!gpio_get(ADC_1_PIN_IRQ));
 
     gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
-    spi_write_blocking(spi1, tx, 1);
+    spi_write_read_blocking(spi1, tx, rx, 1);
 
     mcp_pio_start(&mpio);
+    return GOOD;
 }
