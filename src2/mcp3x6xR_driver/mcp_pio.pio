@@ -1,0 +1,22 @@
+; PIO program to perform SPI reads of the MCP3x6xR ADCs in 32-bit data format mode
+; Assumes that CS has been driven low and that the ADC is in Continuous Conversion mode
+; Pins:
+;   --  SCK     sideset
+;   --  MISO    in
+;   --  nIRQ    jmp
+;
+
+.program mcp_conversions_read
+.side_set 1            ; SCK
+
+.wrap_target
+public entry_point:
+    set x, 31           side 0       ; 32 bits
+    wait 1 jmppin       side 0       ; wait nIRQ hi jmp_pin
+    wait 0 jmppin       side 0 [1]   ; wait nIRQ low jmp_pin
+bitloop:
+    nop                 side 1 [1]   ; SCK high
+    in  pins, 1         side 0       ; sample MISO
+    jmp x-- bitloop     side 0
+
+.wrap
