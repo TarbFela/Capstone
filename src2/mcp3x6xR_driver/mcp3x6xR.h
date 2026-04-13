@@ -382,6 +382,20 @@ SCAN[n] Bit Channel Name                        Channel ID  MUX[7:0]    Correspo
 #define MCP_SCAN_SEL_BIT_SE_CH1     (0x1<<1)
 #define MCP_SCAN_SEL_BIT_SE_CH0     (0x1<<0)
 
+/*======================================*
+ *       SCAN MODE DELAY SELECT         *
+ *======================================*/
+
+// DLY[2:0] — delay between conversions within a single SCAN cycle (SCAN[23:21])
+#define MCP_SCAN_DLY_0      (0x0 << 21)   // no delay (default)
+#define MCP_SCAN_DLY_8      (0x1 << 21)   // 8 DMCLK periods
+#define MCP_SCAN_DLY_16     (0x2 << 21)   // 16 DMCLK periods
+#define MCP_SCAN_DLY_32     (0x3 << 21)   // 32 DMCLK periods
+#define MCP_SCAN_DLY_64     (0x4 << 21)   // 64 DMCLK periods
+#define MCP_SCAN_DLY_128    (0x5 << 21)   // 128 DMCLK periods
+#define MCP_SCAN_DLY_256    (0x6 << 21)   // 256 DMCLK periods
+#define MCP_SCAN_DLY_512    (0x7 << 21)   // 512 DMCLK periods
+
 typedef enum mcp_mux_vals {
     MCP_MUX_VAL_Int_VCM             = 0xF,
     MCP_MUX_VAL_Int_Temp_Diode_M    = 0xE,
