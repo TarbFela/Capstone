@@ -1,14 +1,10 @@
 #include "mcp3x6xR.h"
 
-#include <stdio.h>
 #include <stdint.h>
+#include "pico/stdlib.h"
 
-#include "stdlib.h"
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
-
-#include "pico/stdlib.h"
-#include "pico/bootrom.h"
 
 #define MCP_SPI_BAUDRATE 48000
 #define MCP_SLEEPTIME_US 500

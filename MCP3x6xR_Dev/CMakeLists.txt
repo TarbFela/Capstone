@@ -19,6 +19,7 @@ add_executable(mcp3x6xR_dev
 	../src2/capstone_w25.c
 		mcp3x6xR_driver/mcp3x6xR.c
 		mcp3x6xR_driver/mcp_pio.c
+		ADPC_ADC.c
 )
 
 pico_generate_pio_header(mcp3x6xR_dev ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp_pio.pio)
