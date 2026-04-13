@@ -502,4 +502,6 @@ mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly);
 // 0 = no delay (default). Max = 0xFFFFFF.
 mcp_status_t mcp_timer_set(mcp_info_t *s, uint32_t timer_dmclk);
 
+mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cfg2, uint8_t cfg3);
+
 #endif
