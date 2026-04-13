@@ -10,7 +10,8 @@ typedef struct mcp_pio_t {
     PIO pio;
     uint sm;
     mcp_info_t *mcp_info;
-    uint dma;
+    uint dma_a;
+    uint dma_b;
     uint32_t *buff;
 } mcp_pio_t;
 
