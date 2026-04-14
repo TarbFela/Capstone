@@ -112,6 +112,17 @@ static void msif_write_field(const uint *pins, int nbits, uint8_t value) {
     }
 }
 
+// +++ Print the hello banner and command help. Called at startup AND on '?'.
+// +++ The startup copy is usually dropped because VS Code Serial Monitor
+// +++ doesn't assert DTR until after the firmware has already printed and
+// +++ the pico_stdio_usb layer silently drops output with no host connected,
+// +++ so '?' is the reliable way to retrieve this after a late connect.
+static void msif_print_banner(void) {
+    printf("Hello Capstone World!\n");
+    printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
+           "S=SPEED M=MODE G=GAIN N=RANGE (inc), ?=help, q=BOOTSEL\n");
+}
+
 // +++ Read all MSIF digital I/O pins and print state over USB serial.
 // +++ Inputs use gpio_get() (real pad state). Outputs use gpio_get_out_level()
 // +++ which reads the latched GPIO_OUT register directly — avoids the 2-cycle
@@ -144,10 +155,7 @@ int main(void) {
 
     msif_gpio_init();   // +++ configure all MSIF digital I/O pins
 
-    printf("Hello Capstone World!\n");
-    printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
-           "S=SPEED M=MODE G=GAIN N=RANGE (inc), q=BOOTSEL\n");
-
+    msif_print_banner();
 
     while(1) {
         int uii = stdio_getchar_timeout_us(100);
@@ -155,6 +163,8 @@ int main(void) {
             char ui = (char)uii;
             // QUIT
             if (ui == 'q') break;
+            // +++ HELP: reprint the banner (useful after a late host connect)
+            else if (ui == '?') msif_print_banner();
             // +++ STATUS: print all digital I/O state
             else if (ui == 's') msif_print_digital_io();
             // +++ TOGGLE ON_LINE: flip MSIF_ON_LINE_PIN and print new state
@@ -205,7 +215,7 @@ int main(void) {
                     (v >> 1) & 1, v & 1, v);
             }
             else printf("Input received! [s=status, o=ONLINE, r=RESET c=CLR_EC, "
-                        "S=SPEED M=MODE G=GAIN N=RANGE, q=BOOTSEL]\n");
+                        "S=SPEED M=MODE G=GAIN N=RANGE, ?=help, q=BOOTSEL]\n");
         }
     }
 
