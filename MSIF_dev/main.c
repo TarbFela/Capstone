@@ -12,6 +12,8 @@
 #include "hardware/clocks.h"
 #include "pico/multicore.h"
 
+#include "MSIF_cfg.h"
+
 int main(void) {
                         /*** INITS ***/
     stdio_init_all();
