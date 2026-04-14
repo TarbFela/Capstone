@@ -80,6 +80,38 @@ static void msif_gpio_init(void) {
     #undef INIT_OUT
 }
 
+// +++ Pin tables for the multi-bit MSIF output fields. LSB-first.
+static const uint msif_speed_pins[4] = {
+    MSIF_SPEED_0_PIN, MSIF_SPEED_1_PIN, MSIF_SPEED_2_PIN, MSIF_SPEED_3_PIN
+};
+static const uint msif_mode_pins[3]  = {
+    MSIF_MODE_0_PIN, MSIF_MODE_1_PIN, MSIF_MODE_2_PIN
+};
+static const uint msif_gain_pins[2]  = {
+    MSIF_GAIN_0_PIN, MSIF_GAIN_1_PIN
+};
+static const uint msif_range_pins[2] = {
+    MSIF_RANGE_0_PIN, MSIF_RANGE_1_PIN
+};
+
+// +++ Read a multi-bit output field from latched GPIO_OUT state (LSB-first).
+// +++ Uses gpio_get_out_level() so it's safe to call right after a write
+// +++ (avoids the 2-cycle GPIO_IN synchronizer race).
+static uint8_t msif_read_field(const uint *pins, int nbits) {
+    uint8_t v = 0;
+    for (int i = 0; i < nbits; i++) {
+        v |= (uint8_t)((gpio_get_out_level(pins[i]) & 1) << i);
+    }
+    return v;
+}
+
+// +++ Write a multi-bit output field (LSB-first).
+static void msif_write_field(const uint *pins, int nbits, uint8_t value) {
+    for (int i = 0; i < nbits; i++) {
+        gpio_put(pins[i], (value >> i) & 1);
+    }
+}
+
 // +++ Read all MSIF digital I/O pins and print state over USB serial.
 // +++ Inputs use gpio_get() (real pad state). Outputs use gpio_get_out_level()
 // +++ which reads the latched GPIO_OUT register directly — avoids the 2-cycle
@@ -113,7 +145,8 @@ int main(void) {
     msif_gpio_init();   // +++ configure all MSIF digital I/O pins
 
     printf("Hello Capstone World!\n");
-    printf("Commands: s=status, o=toggle ON_LINE, q=BOOTSEL\n");
+    printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
+           "S=SPEED M=MODE G=GAIN N=RANGE (inc), q=BOOTSEL\n");
 
 
     while(1) {
@@ -129,7 +162,50 @@ int main(void) {
                 gpio_xor_mask(1u << MSIF_ON_LINE_PIN);
                 printf("ON_LINE=%d\n", (int)gpio_get_out_level(MSIF_ON_LINE_PIN));
             }
-            else printf("Input recieved! [s=status, o=ON_LINE, q=BOOTSEL]\n");
+            // +++ PULSE RESET_SCAN (~10ms high, then low)
+            else if (ui == 'r') {
+                gpio_put(MSIF_RESET_SCAN_PIN, 1);
+                sleep_ms(10);
+                gpio_put(MSIF_RESET_SCAN_PIN, 0);
+                printf("RESET_SCAN pulsed (10ms)\n");
+            }
+            // +++ PULSE CLR_EC (~10ms high, then low)
+            else if (ui == 'c') {
+                gpio_put(MSIF_CLR_EC_PIN, 1);
+                sleep_ms(10);
+                gpio_put(MSIF_CLR_EC_PIN, 0);
+                printf("CLR_EC pulsed (10ms)\n");
+            }
+            // +++ INCREMENT SPEED (4-bit, wraps at 16)
+            else if (ui == 'S') {
+                uint8_t v = (uint8_t)((msif_read_field(msif_speed_pins, 4) + 1) & 0x0F);
+                msif_write_field(msif_speed_pins, 4, v);
+                printf("SPEED=%d%d%d%d (0x%X)\n",
+                    (v >> 3) & 1, (v >> 2) & 1, (v >> 1) & 1, v & 1, v);
+            }
+            // +++ INCREMENT MODE (3-bit, wraps at 8)
+            else if (ui == 'M') {
+                uint8_t v = (uint8_t)((msif_read_field(msif_mode_pins, 3) + 1) & 0x07);
+                msif_write_field(msif_mode_pins, 3, v);
+                printf("MODE=%d%d%d (0x%X)\n",
+                    (v >> 2) & 1, (v >> 1) & 1, v & 1, v);
+            }
+            // +++ INCREMENT GAIN (2-bit, wraps at 4)
+            else if (ui == 'G') {
+                uint8_t v = (uint8_t)((msif_read_field(msif_gain_pins, 2) + 1) & 0x03);
+                msif_write_field(msif_gain_pins, 2, v);
+                printf("GAIN=%d%d (0x%X)\n",
+                    (v >> 1) & 1, v & 1, v);
+            }
+            // +++ INCREMENT RANGE (2-bit, wraps at 4). 'N' for raNge (r is RESET_SCAN).
+            else if (ui == 'N') {
+                uint8_t v = (uint8_t)((msif_read_field(msif_range_pins, 2) + 1) & 0x03);
+                msif_write_field(msif_range_pins, 2, v);
+                printf("RANGE=%d%d (0x%X)\n",
+                    (v >> 1) & 1, v & 1, v);
+            }
+            else printf("Input received! [s=status, o=ONLINE, r=RESET c=CLR_EC, "
+                        "S=SPEED M=MODE G=GAIN N=RANGE, q=BOOTSEL]\n");
         }
     }
 
