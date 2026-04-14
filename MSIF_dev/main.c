@@ -20,6 +20,7 @@ int main(void) {
     stdio_init_all();
     sleep_ms(1000);
 
+    // write the rest of this function in msif_gpio.h
     msif_gpio_init();
 
 
