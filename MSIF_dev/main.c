@@ -81,6 +81,10 @@ static void msif_gpio_init(void) {
 }
 
 // +++ Read all MSIF digital I/O pins and print state over USB serial.
+// +++ Inputs use gpio_get() (real pad state). Outputs use gpio_get_out_level()
+// +++ which reads the latched GPIO_OUT register directly — avoids the 2-cycle
+// +++ synchronizer race where gpio_get() on an output pin returns stale data
+// +++ if called immediately after a write.
 static void msif_print_digital_io(void) {
     // Inputs (via U21 inverter — 1 = active at QMS)
     printf("IN : EMIS_OK=%d  SCAN_IN_PROGRESS=%d\n",
@@ -90,15 +94,15 @@ static void msif_print_digital_io(void) {
     // Outputs (via BSS138 — 1 = MOSFET on = signal active at QMS)
     printf("OUT: ON_LINE=%d  RESET_SCAN=%d  CLR_EC=%d  "
            "SPEED=%d%d%d%d  MODE=%d%d%d  GAIN=%d%d  RANGE=%d%d\n",
-           (int)gpio_get(MSIF_ON_LINE_PIN),
-           (int)gpio_get(MSIF_RESET_SCAN_PIN),
-           (int)gpio_get(MSIF_CLR_EC_PIN),
-           (int)gpio_get(MSIF_SPEED_3_PIN), (int)gpio_get(MSIF_SPEED_2_PIN),
-           (int)gpio_get(MSIF_SPEED_1_PIN), (int)gpio_get(MSIF_SPEED_0_PIN),
-           (int)gpio_get(MSIF_MODE_2_PIN),  (int)gpio_get(MSIF_MODE_1_PIN),
-           (int)gpio_get(MSIF_MODE_0_PIN),
-           (int)gpio_get(MSIF_GAIN_1_PIN),  (int)gpio_get(MSIF_GAIN_0_PIN),
-           (int)gpio_get(MSIF_RANGE_1_PIN), (int)gpio_get(MSIF_RANGE_0_PIN));
+           (int)gpio_get_out_level(MSIF_ON_LINE_PIN),
+           (int)gpio_get_out_level(MSIF_RESET_SCAN_PIN),
+           (int)gpio_get_out_level(MSIF_CLR_EC_PIN),
+           (int)gpio_get_out_level(MSIF_SPEED_3_PIN), (int)gpio_get_out_level(MSIF_SPEED_2_PIN),
+           (int)gpio_get_out_level(MSIF_SPEED_1_PIN), (int)gpio_get_out_level(MSIF_SPEED_0_PIN),
+           (int)gpio_get_out_level(MSIF_MODE_2_PIN),  (int)gpio_get_out_level(MSIF_MODE_1_PIN),
+           (int)gpio_get_out_level(MSIF_MODE_0_PIN),
+           (int)gpio_get_out_level(MSIF_GAIN_1_PIN),  (int)gpio_get_out_level(MSIF_GAIN_0_PIN),
+           (int)gpio_get_out_level(MSIF_RANGE_1_PIN), (int)gpio_get_out_level(MSIF_RANGE_0_PIN));
 }
 
 int main(void) {
@@ -123,7 +127,7 @@ int main(void) {
             // +++ TOGGLE ON_LINE: flip MSIF_ON_LINE_PIN and print new state
             else if (ui == 'o') {
                 gpio_xor_mask(1u << MSIF_ON_LINE_PIN);
-                printf("ON_LINE=%d\n", (int)gpio_get(MSIF_ON_LINE_PIN));
+                printf("ON_LINE=%d\n", (int)gpio_get_out_level(MSIF_ON_LINE_PIN));
             }
             else printf("Input recieved! [s=status, o=ON_LINE, q=BOOTSEL]\n");
         }
