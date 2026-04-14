@@ -13,13 +13,14 @@
 #include "pico/multicore.h"
 
 #include "MSIF_cfg.h"
+#include "msif_gpio.h"
 
 int main(void) {
                         /*** INITS ***/
     stdio_init_all();
     sleep_ms(1000);
 
-    printf("Hello Capstone World!\n");
+    msif_gpio_init();
 
 
     while(1) {
