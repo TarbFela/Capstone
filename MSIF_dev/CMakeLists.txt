@@ -14,6 +14,7 @@ pico_sdk_init()
 # rest of your project
 add_executable(msif_dev
 	main.c
+	msif_gpio.c
 )
 
 target_include_directories(msif_dev
