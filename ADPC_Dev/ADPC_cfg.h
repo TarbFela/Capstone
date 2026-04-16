@@ -38,3 +38,5 @@
 #define TMP_SNS_PIN_SDA 10
 #define TMP_SNS_PIN_SCL 15
 #define TMP_SNS_I2C i2c1
+
+

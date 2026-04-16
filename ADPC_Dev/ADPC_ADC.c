@@ -30,6 +30,7 @@ int adpc_adc_init(void (*dma_handler)(void)) {
         rx[i] = 0;
     }
 
+    printf("configuring...\t");
     mcp_status_t status = mcp_configure( &mcp_1,
 MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL,
 MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256,
@@ -37,8 +38,10 @@ MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_E
 MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN
             );
     if(status&MCP_STATUS_ERROR_FLAG) return CONFIG_FAILED;
+    printf("done\n");
 
     // write MUX
+    printf("mux write...\t");
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
     tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
     gpio_put(ADC_1_PIN_CS,0); sleep_us(100);
@@ -48,6 +51,7 @@ MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN
         tx[i] = 0;
         rx[i] = 0;
     }
+    printf("done\n");
 
     return GOOD;
 }
