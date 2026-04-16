@@ -48,42 +48,20 @@ mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
         rx[i] = 0;
     }
 
-    // read all config regs.
-    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_CONFIG0);
-    gpio_put(s->cs,0); sleep_us(100);
-    spi_write_read_blocking(spi1, tx, rx, 5);
-    sleep_us(100); gpio_put(s->cs,1);
-    // if the status byte is zero, the ADC is not communicating.
-    if(rx[0] == 00) return MCP_STATUS_NO_CONNECTION;
-
-
-
-    printf("writing...\t");
     // write all config regs
-    //tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
-    uint8_t cmd = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
-
     if(mcp_write_regs(s, s->cfg.cfg, 4, MCP_REG_ADDR_CONFIG0) & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
     for(int i =0; i<16; i++) {
         tx[i] = 0;
         rx[i] = 0;
     }
-    printf("reading...\t");
-
 
     // read all config regs again
     mcp_read_regs(s,rx+1,4,MCP_REG_ADDR_CONFIG0);
 
-    printf("checking...\t");
-    // check that the write was performed correctly.
-//    if (    (rx[1] != (MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY))
-//            ||  (rx[2] != (MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256))
-//            ||  (rx[3] != (MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1))
-//            ||  (rx[4] != (MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN))
-//            ) return CONFIG_FAILED;
-    printf("rx: 0x%02X 0x%02X 0x%02X 0x%02X\n",rx[1],rx[2],rx[3],rx[4]);
+    for(int i = 0; i<4; i++) {
+        if(s->cfg.cfg[i] != rx[i+1]) return MCP_STATUS_WRITE_FAILED;
+    }
 
-    printf("mux write...\t");
     // write MUX
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
     tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
@@ -147,10 +125,10 @@ mcp_status_t mcp_write_reg_masked(mcp_info_t *s, uint8_t mask, uint32_t val, int
     uint8_t reg_val = 0xFF;
 
     // TODO: add status checking
-    status = mcp_read_regs(s, &reg_val, 1, reg_addr);
+    status &= mcp_read_regs(s, &reg_val, 1, reg_addr);
     reg_val &= ~mask;
     reg_val |= val;
-    status = mcp_write_regs(s,&reg_val,1,reg_addr);
+    status &= mcp_write_regs(s,&reg_val,1,reg_addr);
 
     return status;
 }
@@ -159,7 +137,7 @@ mcp_status_t mcp_write_reg_masked(mcp_info_t *s, uint8_t mask, uint32_t val, int
 int mcp_write_reg_masked_verify(mcp_info_t *s, uint8_t mask, uint32_t val, int reg_addr) {
     mcp_status_t status;
     status = mcp_write_reg_masked(s,mask,val,reg_addr);
-    if(status == MCP_STATUS_BAD_INPUTS) return -1;
+    if(status&MCP_STATUS_ERROR_FLAG) return -1;
     uint8_t read_val = 0xFF;
     mcp_read_regs(s,&read_val,1,reg_addr);
     return (read_val & mask) != (val);
@@ -235,13 +213,9 @@ mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux
     };
     uint8_t rx[2] = {0xFF,0xFF};
 
-    gpio_put(s->cs,MCP_CS_SELECT);
-    sleep_us(MCP_SLEEPTIME_US);
-
+    gpio_put(s->cs,MCP_CS_SELECT); sleep_us(MCP_SLEEPTIME_US);
     spi_write_read_blocking(s->spi, tx, rx, 2);
-
-    sleep_us(MCP_SLEEPTIME_US);
-    gpio_put(s->cs,MCP_CS_DESELECT);
+    sleep_us(MCP_SLEEPTIME_US); gpio_put(s->cs,MCP_CS_DESELECT);
 
     return rx[0];
 }

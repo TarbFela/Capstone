@@ -32,6 +32,7 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN;
     mcp_configure(&mcp_1, cfgs);
 
+
     return GOOD;
 }
 
