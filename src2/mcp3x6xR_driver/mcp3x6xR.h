@@ -483,8 +483,10 @@ mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst);
 mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux_n);
 
 mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
+
 mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
+mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.
@@ -502,6 +504,6 @@ mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly);
 // 0 = no delay (default). Max = 0xFFFFFF.
 mcp_status_t mcp_timer_set(mcp_info_t *s, uint32_t timer_dmclk);
 
-mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cfg2, uint8_t cfg3);
+
 
 #endif

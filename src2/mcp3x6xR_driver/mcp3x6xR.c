@@ -6,8 +6,10 @@
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
 
+#include <stdio.h>
+
 #define MCP_SPI_BAUDRATE 48000
-#define MCP_SLEEPTIME_US 500
+#define MCP_SLEEPTIME_US 100
 #define MCP_CS_DESELECT 1
 #define MCP_CS_SELECT 0
 
@@ -28,47 +30,81 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     s->mosi = mosi_pin;
     s->sck = sck_pin;
     s->nirq = nirq_pin;
+    s->spi = spi;
 
     return 0;
 }
 
 
-mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cfg2, uint8_t cfg3) {
-    // force no partial shutdown and standby mode.
-    s->cfg.cfg[0] = cfg0;//(cfg0 & ~MCP_CFG0_ADC_MODE_BITS) | MCP_CFG0_ADC_MODE_STDBY | MCP_CFG0_ADC_MODE_BITS;
-    s->cfg.cfg[1] = cfg1;
-    s->cfg.cfg[2] = cfg2;
-    s->cfg.cfg[3] = cfg3;
+mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
+    s->cfg.cfg[0] = (cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
+    s->cfg.cfg[1] = cfgs[1];
+    s->cfg.cfg[2] = cfgs[2];
+    s->cfg.cfg[3] = cfgs[3];
 
-    mcp_status_t status;
-    status = mcp_write_regs(s, s->cfg.cfg, 3, MCP_REG_ADDR_CONFIG0);
-    if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
-    if(status & MCP_STATUS_ERROR_FLAG) return status;
-
-    uint8_t rx[5];
-    status = mcp_read_regs(s, rx, 3, MCP_REG_ADDR_CONFIG0);
-    if(status == 0x00) return MCP_STATUS_NO_CONNECTION;
-
-    // check that config was written correctly.
-    if (    (rx[1] != s->cfg.cfg[0])
-        ||  (rx[2] != s->cfg.cfg[1])
-        ||  (rx[3] != s->cfg.cfg[2])
-        ||  (rx[4] != s->cfg.cfg[3])) {
-        return MCP_STATUS_WRITE_FAILED;
+    uint8_t tx[16], rx[16];
+    for(int i =0; i<16; i++) {
+        tx[i] = 0;
+        rx[i] = 0;
     }
 
-    return status;
+    // read all config regs.
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_CONFIG0);
+    gpio_put(s->cs,0); sleep_us(100);
+    spi_write_read_blocking(spi1, tx, rx, 5);
+    sleep_us(100); gpio_put(s->cs,1);
+    // if the status byte is zero, the ADC is not communicating.
+    if(rx[0] == 00) return MCP_STATUS_NO_CONNECTION;
+
+
+
+    printf("writing...\t");
+    // write all config regs
+    //tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
+    uint8_t cmd = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
+
+    if(mcp_write_regs(s, s->cfg.cfg, 4, MCP_REG_ADDR_CONFIG0) & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
+    for(int i =0; i<16; i++) {
+        tx[i] = 0;
+        rx[i] = 0;
+    }
+    printf("reading...\t");
+
+
+    // read all config regs again
+    mcp_read_regs(s,rx+1,4,MCP_REG_ADDR_CONFIG0);
+
+    printf("checking...\t");
+    // check that the write was performed correctly.
+//    if (    (rx[1] != (MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY))
+//            ||  (rx[2] != (MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256))
+//            ||  (rx[3] != (MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1))
+//            ||  (rx[4] != (MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_SGN))
+//            ) return CONFIG_FAILED;
+    printf("rx: 0x%02X 0x%02X 0x%02X 0x%02X\n",rx[1],rx[2],rx[3],rx[4]);
+
+    printf("mux write...\t");
+    // write MUX
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
+    tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
+    gpio_put(s->cs,0); sleep_us(100);
+    spi_write_read_blocking(s->spi, tx, rx, 2);
+    sleep_us(100); gpio_put(s->cs,1);
+    for(int i =0; i<16; i++) {
+        tx[i] = 0;
+        rx[i] = 0;
+    }
 }
 
 
 mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr) {
-    uint8_t cmd[2] = {MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(reg_addr)};
     uint8_t status = 0xFF;
+    uint8_t cmd = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(reg_addr);
 
-    gpio_put(s->cs,MCP_CS_SELECT); sleep_us(MCP_SLEEPTIME_US);
-    spi_write_read_blocking(s->spi, cmd, &status, 1);
-    spi_read_blocking(s->spi, 0,dst,n);
-    sleep_us(MCP_SLEEPTIME_US); gpio_put(s->cs,MCP_CS_DESELECT);
+    gpio_put(s->cs,0); sleep_us(100);
+    spi_write_read_blocking(s->spi,&cmd,&status,1);
+    spi_read_blocking(s->spi, 0, dst, 4);
+    sleep_us(100); gpio_put(s->cs,1);
 
     return status;
 }
@@ -77,10 +113,11 @@ mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr) 
     uint8_t cmd = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(reg_addr);
     uint8_t status = 0xFF;
 
-    gpio_put(s->cs,MCP_CS_SELECT); sleep_us(MCP_SLEEPTIME_US);
-    spi_write_read_blocking(s->spi, &cmd, &status, 1);
-    spi_write_blocking(s->spi,vals,n);
-    sleep_us(MCP_SLEEPTIME_US); gpio_put(s->cs,MCP_CS_DESELECT);
+    gpio_put(s->cs,0); sleep_us(100);
+    //spi_write_read_blocking(spi1, tx, rx, 5);
+    spi_write_read_blocking(s->spi,&cmd,&status,1);
+    spi_write_blocking(s->spi, vals,n);
+    sleep_us(100); gpio_put(s->cs,1);
 
     return status;
 }
