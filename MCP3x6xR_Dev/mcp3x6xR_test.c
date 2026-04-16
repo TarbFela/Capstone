@@ -81,11 +81,10 @@ sample:
     }
     while(!dma_done) {
         sleep_ms(20);
-        if(tii > 100) {
+        if(tii++ > 100) {
             printf("TIMEOUT!\n");
             goto reboot;
         }
-        tii++;
     }
     printf("Samples:\n");
     for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
