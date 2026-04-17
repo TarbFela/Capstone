@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 #define MCP_SPI_BAUDRATE 48000
-#define MCP_SLEEPTIME_US 5
+#define MCP_SLEEPTIME_US 100
 #define MCP_CS_DESELECT 1
 #define MCP_CS_SELECT 0
 
@@ -37,12 +37,10 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
 
 
 mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
-    mcp_status_t status;
-    uint8_t *cfgs = cfg->cfgs;
-    s->cfg.cfgs[0] = (cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
-    s->cfg.cfgs[1] = cfgs[1];
-    s->cfg.cfgs[2] = cfgs[2];
-    s->cfg.cfgs[3] = cfgs[3];
+    s->cfg.cfgs[0] = (cfg->cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
+    s->cfg.cfgs[1] = cfg->cfgs[1];
+    s->cfg.cfgs[2] = cfg->cfgs[2];
+    s->cfg.cfgs[3] = cfg->cfgs[3];
 
     uint8_t tx[16], rx[16];
     for(int i =0; i<16; i++) {
@@ -51,8 +49,7 @@ mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
     }
 
     // write all config regs
-    status = mcp_write_regs(s, s->cfg.cfgs, 4, MCP_REG_ADDR_CONFIG0);
-    if (status & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
+    if(mcp_write_regs(s, s->cfg.cfgs, 4, MCP_REG_ADDR_CONFIG0) & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
     for(int i =0; i<16; i++) {
         tx[i] = 0;
         rx[i] = 0;
@@ -65,44 +62,32 @@ mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
         if(s->cfg.cfgs[i] != rx[i+1]) return MCP_STATUS_WRITE_FAILED;
     }
 
-    // write MUX
-    if(cfg->input_mode == MCP_SCAN_MODE) {
+
+
+    if (cfg->input_mode == MCP_SCAN_MODE) {
+        printf("USING SCAN MODE!\n");
         tx[0] = 0;
-        tx[1] = (uint8_t) (cfg->scan_sel >> 8);
-        tx[2] = (uint8_t) (cfg->scan_sel);
-        status = mcp_write_regs(s, tx, 3, MCP_REG_ADDR_SCAN);
-        status = mcp_scan_set_dly(s,cfg->scan_dly);
-        status = mcp_timer_set(s,cfg->scan_timer);
+        tx[1] = (uint8_t)((cfg->scan_sel)>>8);
+        tx[2] = (uint8_t)((cfg->scan_sel));
     }
-    else if (cfg->input_mode == MCP_MUX_MODE) {
-        status = mcp_write_regs(s,&(cfg->mux_sel),1,MCP_REG_ADDR_MUX);
+    else {
+        tx[0] = 0;
+        tx[1] = 0;
+        tx[2] = 0;
     }
-    return status;
+    printf("tx: %02X %02X %02X\n",tx[0],tx[1],tx[2]);
+    mcp_write_regs(s, tx, 3, MCP_REG_ADDR_SCAN);
 
+    mcp_read_regs(s,rx,3,MCP_REG_ADDR_SCAN);
+    printf("rx: %02X %02X %02X\n",rx[0],rx[1],rx[2]);
 
+    if (cfg->input_mode == MCP_MUX_MODE){
+        printf("USING MUX MODE!\n");
+        tx[0] = cfg->mux_sel;
+        mcp_write_regs(s, tx, 1, MCP_REG_ADDR_MUX);
+    }
 
-//    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
-//    tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
-//    gpio_put(s->cs,0); sleep_us(100);
-//    spi_write_read_blocking(s->spi, tx, rx, 2);
-//    sleep_us(100); gpio_put(s->cs,1);
-//    for(int i =0; i<16; i++) {
-//        tx[i] = 0;
-//        rx[i] = 0;
-//    }
-}
-
-// Does NOT necessarily get the MCP3x6xR's default config. This is just a good working configuration.
-void mcp_get_default_config(mcp_cfg_t *cfg) {
-    cfg->cfgs[0] = MCP_CFG0_ADC_MODE_STDBY | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_CURRENT_BIAS_SEL_0u0A;
-    cfg->cfgs[1] = MCP_CFG1_OSR_256 | MCP_CFG1_AMCLK_PRESCALE_NONE;
-    cfg->cfgs[2] = MCP_CFG2_AUTO_ZERO_MUX_DIS | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_BIAS_CURRENT_SEL_1;
-    cfg->cfgs[3] = MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY | MCP_CFG3_CRC_DIS | MCP5_CFG3_DATA_FORMAT_32_SGN;
-    cfg->input_mode = MCP_MUX_MODE;
-    cfg->mux_sel = MCP_MUX_P_SEL(MCP_MUX_VAL_CH0) | MCP_MUX_N_SEL(MCP_MUX_VAL_CH1);
-    cfg->scan_sel = 0;
-    cfg->scan_timer = 0;
-    cfg->scan_dly = 0;
+    return 0;
 }
 
 
@@ -150,7 +135,7 @@ mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr) 
 // Read–modify–write
 // only works on 8-bit registers.
 // mask and val should both be shifted to the appropriate position.
-mcp_status_t mcp_write_reg_masked(mcp_info_t *s, uint8_t mask, uint8_t val, int reg_addr) {
+mcp_status_t mcp_write_reg_masked(mcp_info_t *s, uint8_t mask, uint32_t val, int reg_addr) {
     if((mask&val) != val) return MCP_STATUS_BAD_INPUTS;
     uint8_t status = 0xFF;
     uint8_t reg_val = 0xFF;
@@ -172,15 +157,6 @@ int mcp_write_reg_masked_verify(mcp_info_t *s, uint8_t mask, uint32_t val, int r
     uint8_t read_val = 0xFF;
     mcp_read_regs(s,&read_val,1,reg_addr);
     return (read_val & mask) != (val);
-}
-
-mcp_status_t mcp_start_continuous_read(mcp_info_t *s) {
-    mcp_status_t status = 0xFF;
-    uint8_t tx = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
-    while(!gpio_get(s->nirq)) tight_loop_contents();
-    gpio_put(s->cs,0); sleep_us(MCP_SLEEPTIME_US);
-    spi_write_read_blocking(spi1, &tx, &status, 1);
-    return status;
 }
 
 //
@@ -311,7 +287,7 @@ mcp_status_t mcp_scan_set_channels(mcp_info_t *s, uint16_t channel_mask) {
 // Set the inter-conversion delay within a SCAN cycle (DLY[2:0], SCAN[23:21]).
 // delay_dly must be one of the MCP_SCAN_DLY_* macros (already shifted).
 // Does not disturb the channel selection bits.
-mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint8_t delay_dly) {
+mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly) {
     return mcp_write_reg24_masked(s,
                                   MCP_SCAN_DLY_MASK,
                                   delay_dly,

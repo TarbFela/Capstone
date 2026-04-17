@@ -119,7 +119,6 @@
     * 00 = 24-bit (default ADC coding): 24-bit ADC data. It does not allow overrange (ADC code locked to
     * 0xFFFFFF or 0x800000).
     */
-#define MCP5_CFG3_DATA_FORMAT_BITS 0x3<<4
 #define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 0x3<<4
 #define MCP5_CFG3_DATA_FORMAT_32_SGN 0x2<<4
 #define MCP5_CFG3_DATA_FORMAT_32_LJ 0x1<<4
@@ -455,19 +454,15 @@ typedef uint8_t mcp_status_t;
 //    uint8_t mux_mode_inputs[2];
 //} mcp_config_t;
 
-typedef enum {MCP_SCAN_MODE, MCP_MUX_MODE} mcp_input_mode_t;
+enum mcp_input_mode {MCP_SCAN_MODE, MCP_MUX_MODE};
 
 // Just the cfg0..2 registers which should be written.
 typedef struct mcp_cfg_t {
     uint8_t cfgs[4];
-    mcp_input_mode_t input_mode;
-    uint16_t scan_sel; // value which goes into SCAN_SEL register; if zero, then MUX mode is used.
-    uint16_t scan_dly; // use the macros
-    uint32_t scan_timer; // any 24-bit value
-    uint8_t mux_sel; // value which goes into MUX register.
+    uint8_t input_mode;
+    uint16_t scan_sel;
+    uint8_t mux_sel;
 } mcp_cfg_t;
-
-
 
 // TODO: write the config struct and functions.
 typedef struct mcp_info_t {
@@ -496,15 +491,7 @@ mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
 
 mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
-mcp_status_t mcp_write_reg_masked(mcp_info_t *s, uint8_t mask, uint8_t val, int reg_addr);
-
-static mcp_status_t mcp_write_reg24_masked(mcp_info_t *s, uint32_t mask, uint32_t val, int reg_addr);
-
 mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg);
-
-void mcp_get_default_config(mcp_cfg_t *cfg);
-
-//mcp_status_t mcp_start_continuous_read(mcp_info_t *s);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.
@@ -516,7 +503,7 @@ mcp_status_t mcp_scan_set_channels(mcp_info_t *s, uint16_t channel_mask);
 
 // Set the delay between conversions within a SCAN cycle (DLY[2:0]).
 // delay_dly must be one of the MCP_SCAN_DLY_* values.
-mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint8_t delay_dly);
+mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly);
 
 // Set the delay between consecutive SCAN cycles (TIMER[23:0], in DMCLK periods).
 // 0 = no delay (default). Max = 0xFFFFFF.
