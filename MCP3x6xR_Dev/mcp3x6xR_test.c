@@ -88,8 +88,8 @@ sample:
     }
     printf("Samples:\n");
     for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-        printf("%10ld\t",dma_buff[i]);
-        if((i%8)==7) printf("\t[%d]\n",i);
+        printf("[%01ld] %010ld  ",dma_buff[i]>>29,(dma_buff[i]&0x3FFFFFFF));
+        if((i%8)==7) printf("\n",i);
     }
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");

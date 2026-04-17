@@ -63,15 +63,27 @@ mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
     }
 
     // write MUX
-    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
-    tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
-    gpio_put(s->cs,0); sleep_us(100);
-    spi_write_read_blocking(s->spi, tx, rx, 2);
-    sleep_us(100); gpio_put(s->cs,1);
-    for(int i =0; i<16; i++) {
-        tx[i] = 0;
-        rx[i] = 0;
-    }
+    uint16_t scan_mask = MCP_SCAN_SEL_BIT_VCM | MCP_SCAN_SEL_BIT_AVDD;
+    tx[0] = 0;
+    tx[1] = (uint8_t)(scan_mask>>8);
+    tx[2] = (uint8_t)(scan_mask);
+
+    mcp_read_regs(s,rx,3,MCP_REG_ADDR_SCAN);
+    printf("scan reg: 0x%02X 0x%02X 0x%02X",rx[0],rx[1],rx[3]);
+
+    mcp_write_regs(s, tx, 3, MCP_REG_ADDR_SCAN);
+
+    mcp_read_regs(s,rx,3,MCP_REG_ADDR_SCAN);
+    printf("scan reg: 0x%02X 0x%02X 0x%02X",rx[0],rx[1],rx[3]);
+//    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_MUX);
+//    tx[1] = MCP_MUX_N_SEL(MCP_MUX_VAL_Int_Temp_Diode_M) | MCP_MUX_P_SEL(MCP_MUX_VAL_Int_Temp_Diode_P);
+//    gpio_put(s->cs,0); sleep_us(100);
+//    spi_write_read_blocking(s->spi, tx, rx, 2);
+//    sleep_us(100); gpio_put(s->cs,1);
+//    for(int i =0; i<16; i++) {
+//        tx[i] = 0;
+//        rx[i] = 0;
+//    }
 }
 
 
