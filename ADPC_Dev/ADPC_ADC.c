@@ -43,18 +43,15 @@ int adpc_adc_init(void (*dma_handler)(void)) {
 int adpc_adc_start() {
     // write ADC mode
     uint8_t tx[2], rx[2];
-    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
-    tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_CONV;
-    gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
-    spi_write_read_blocking(spi1, tx, rx, 2);
-    sleep_us(5); gpio_put(ADC_1_PIN_CS,1);
+    tx[0] = mcp_1.cfg.cfgs[0] | MCP_CFG0_ADC_MODE_CONV;
+    mcp_write_regs(&mcp_1, tx, 1, MCP_REG_ADDR_CONFIG0);
 
     // prepare to perform static read of ADC register
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
     // wait for first IRQ pin signal
-    while(!gpio_get(ADC_1_PIN_IRQ));
+    while(!gpio_get(mcp_1.nirq));
 
-    gpio_put(ADC_1_PIN_CS,0); sleep_us(5);
+    gpio_put(mcp_1.cs,0); sleep_us(5);
     spi_write_read_blocking(spi1, tx, rx, 1);
 
     mcp_pio_start(&mpio_1);
