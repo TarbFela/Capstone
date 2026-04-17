@@ -36,3 +36,46 @@ MCP_MUX_P_SEL(MCP_MUX_VAL_CH4) | MCP_MUX_N_SEL(MCP_MUX_VAL_CH0)
 
 Because these ADCs read out their status while receiving the command byte, all ADC SPI commands are structured to return an `mcp_status_t` (name might change to be more specific). This is a single byte. Another function might be written to parse this byte. Bitfields are defined as `MCP_STAT_<...>`.
 
+### A Note About Error Handling
+
+Some effort has been made to catch loss of communication with the ADC. However, this was not a comprehensive effort by any means, so the behavior of the driver when communication is lost (e.g. if the ADC loses power) is thoroughly undefined!
+
+## PIO
+
+Included here is a PIO program to operate the device in continuous read mode, wherein the nIRQ pin on the ADC is pulled low when a conversion is ready. This triggers the PIO to initiate a SPI read (i.e. the PIO machine sends out 32 clock cycles and shifts the MISO data into a fifo). DMAs are daisy-chained. A globally accessible DMA buffer (`dma_buff`) is provided. It is aligned such that the DMAs should automatically wrap upon filling their respective halves of the buffer. **It is important that the DMAs be provided an interrupt handler to clear interrupts**. See an example below:
+
+```
+void dma_irq_handler(void) {
+    // clear the correct interrupt
+    int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
+    if (culprit_is_a) {
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_a);
+    }
+    else {
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
+    }
+}
+```
+
+### Start and stop functions
+
+Start and stop functions are provided which _only_ enter or exit PIO mode. These functions **only** perform configuration tasks (e.g. for pins, dmas, pio, and spi) but do not communicate with the ADC. A separate SPI command should be sent to initiate conversions; once the nIRQ is pulled low, data is (likely) ready and the PIO start() function can be called. **KEEP CS ACTIVE AFTER THE SPI READ COMMAND!** (as per the datasheet).
+
+```
+    // write ADC mode
+    uint8_t tx[2], rx[2];
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_WRITE_INCR(MCP_REG_ADDR_CONFIG0);
+    tx[1] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_CONV;
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(MCP_SLEEPTIME_US);
+    spi_write_read_blocking(spi1, tx, rx, 2);
+    sleep_us(MCP_SLEEPTIME_US); gpio_put(ADC_1_PIN_CS,1);
+    // prepare to perform static read of ADC register
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
+    // wait for first IRQ pin signal
+    while(!gpio_get(ADC_1_PIN_IRQ)) tight_loop_contents();
+    gpio_put(ADC_1_PIN_CS,0); sleep_us(MCP_SLEEPTIME_US);
+    // perform first read.
+    spi_write_read_blocking(spi1, tx, rx, 1);
+
+    mcp_pio_start(&mpio_1);
+```
