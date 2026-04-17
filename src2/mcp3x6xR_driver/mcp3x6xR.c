@@ -65,7 +65,7 @@ mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
 
 
     if (cfg->input_mode == MCP_SCAN_MODE) {
-        printf("USING SCAN MODE!\n");
+//        printf("USING SCAN MODE!\n");
         tx[0] = 0;
         tx[1] = (uint8_t)((cfg->scan_sel)>>8);
         tx[2] = (uint8_t)((cfg->scan_sel));
@@ -75,14 +75,14 @@ mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
         tx[1] = 0;
         tx[2] = 0;
     }
-    printf("tx: %02X %02X %02X\n",tx[0],tx[1],tx[2]);
+//    printf("tx: %02X %02X %02X\n",tx[0],tx[1],tx[2]);
     mcp_write_regs(s, tx, 3, MCP_REG_ADDR_SCAN);
 
-    mcp_read_regs(s,rx,3,MCP_REG_ADDR_SCAN);
-    printf("rx: %02X %02X %02X\n",rx[0],rx[1],rx[2]);
+//    mcp_read_regs(s,rx,3,MCP_REG_ADDR_SCAN);
+//    printf("rx: %02X %02X %02X\n",rx[0],rx[1],rx[2]);
 
     if (cfg->input_mode == MCP_MUX_MODE){
-        printf("USING MUX MODE!\n");
+//        printf("USING MUX MODE!\n");
         tx[0] = cfg->mux_sel;
         mcp_write_regs(s, tx, 1, MCP_REG_ADDR_MUX);
     }
