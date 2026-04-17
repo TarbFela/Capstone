@@ -491,7 +491,7 @@ mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
 
 mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
-mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]);
+mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.

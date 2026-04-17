@@ -36,11 +36,11 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
 }
 
 
-mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
-    s->cfg.cfgs[0] = (cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
-    s->cfg.cfgs[1] = cfgs[1];
-    s->cfg.cfgs[2] = cfgs[2];
-    s->cfg.cfgs[3] = cfgs[3];
+mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
+    s->cfg.cfgs[0] = (cfg->cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
+    s->cfg.cfgs[1] = cfg->cfgs[1];
+    s->cfg.cfgs[2] = cfg->cfgs[2];
+    s->cfg.cfgs[3] = cfg->cfgs[3];
 
     uint8_t tx[16], rx[16];
     for(int i =0; i<16; i++) {
