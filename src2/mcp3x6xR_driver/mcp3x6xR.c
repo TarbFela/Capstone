@@ -35,6 +35,16 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     return 0;
 }
 
+void mcp_get_default_cfg(mcp_cfg_t *cfg) {
+    cfg->cfgs[0] = MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY | MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_CLK_SEL_INTERNAL;
+    cfg->cfgs[1] = MCP_CFG1_OSR_256 | MCP_CFG1_AMCLK_PRESCALE_NONE;
+    cfg->cfgs[2] = MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_BIAS_CURRENT_SEL_1;
+    cfg->cfgs[3] = MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 | MCP_CFG3_CONV_MODE_CONTINUOUS;
+
+    cfg->scan_sel = 0;
+    cfg->input_mode = MCP_MUX_MODE;
+    cfg->mux_sel = MCP_MUX_P_SEL(MCP_MUX_VAL_CH0) | MCP_MUX_N_SEL(MCP_MUX_VAL_CH1);
+}
 
 mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
     s->cfg.cfgs[0] = (cfg->cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;

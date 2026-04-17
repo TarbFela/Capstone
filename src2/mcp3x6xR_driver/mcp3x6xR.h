@@ -103,8 +103,8 @@
     * 0x = One-shot conversion or one-shot cycle in SCAN mode. It sets ADC_MODE[1:0] to ‘0x’ (ADC
     * Shutdown) at the end of the conversion or at the end of the conversion cycle in SCAN mode (default).
     */
-#define MCP_CFG3_CONV_MODE_CONTINUOUS 0x3<<6
-#define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY 0x2<<6
+#define MCP_CFG3_CONV_MODE_CONTINUOUS (0x3<<6)
+#define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY (0x2<<6)
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_SHTDWN 0x0
 
 
@@ -119,9 +119,9 @@
     * 00 = 24-bit (default ADC coding): 24-bit ADC data. It does not allow overrange (ADC code locked to
     * 0xFFFFFF or 0x800000).
     */
-#define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 0x3<<4
-#define MCP5_CFG3_DATA_FORMAT_32_SGN 0x2<<4
-#define MCP5_CFG3_DATA_FORMAT_32_LJ 0x1<<4
+#define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 (0x3<<4)
+#define MCP5_CFG3_DATA_FORMAT_32_SGN (0x2<<4)
+#define MCP5_CFG3_DATA_FORMAT_32_LJ (0x1<<4)
 #define MCP5_CFG3_DATA_FORMAT_24 0x0
 
 /* bit 3 CRC_FORMAT: CRC Checksum Format Selection on Read Communications
@@ -492,6 +492,8 @@ mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
 mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
 mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg);
+
+void mcp_get_default_cfg(mcp_cfg_t *cfg);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.
