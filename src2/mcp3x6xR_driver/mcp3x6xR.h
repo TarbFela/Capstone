@@ -454,9 +454,14 @@ typedef uint8_t mcp_status_t;
 //    uint8_t mux_mode_inputs[2];
 //} mcp_config_t;
 
+enum mcp_input_mode {MCP_SCAN_MODE, MCP_MUX_MODE};
+
 // Just the cfg0..2 registers which should be written.
 typedef struct mcp_cfg_t {
     uint8_t cfgs[4];
+    uint8_t input_mode;
+    uint16_t scan_sel;
+    uint8_t mux_sel;
 } mcp_cfg_t;
 
 // TODO: write the config struct and functions.
