@@ -37,10 +37,10 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
 
 
 mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
-    s->cfg.cfg[0] = (cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
-    s->cfg.cfg[1] = cfgs[1];
-    s->cfg.cfg[2] = cfgs[2];
-    s->cfg.cfg[3] = cfgs[3];
+    s->cfg.cfgs[0] = (cfgs[0] & ~(MCP_CFG0_ADC_MODE_BITS)) | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_ADC_MODE_STDBY;
+    s->cfg.cfgs[1] = cfgs[1];
+    s->cfg.cfgs[2] = cfgs[2];
+    s->cfg.cfgs[3] = cfgs[3];
 
     uint8_t tx[16], rx[16];
     for(int i =0; i<16; i++) {
@@ -49,7 +49,7 @@ mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
     }
 
     // write all config regs
-    if(mcp_write_regs(s, s->cfg.cfg, 4, MCP_REG_ADDR_CONFIG0) & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
+    if(mcp_write_regs(s, s->cfg.cfgs, 4, MCP_REG_ADDR_CONFIG0) & MCP_STATUS_ERROR_FLAG) return MCP_STATUS_WRITE_FAILED;
     for(int i =0; i<16; i++) {
         tx[i] = 0;
         rx[i] = 0;
@@ -59,7 +59,7 @@ mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfgs[4]) {
     mcp_read_regs(s,rx+1,4,MCP_REG_ADDR_CONFIG0);
 
     for(int i = 0; i<4; i++) {
-        if(s->cfg.cfg[i] != rx[i+1]) return MCP_STATUS_WRITE_FAILED;
+        if(s->cfg.cfgs[i] != rx[i+1]) return MCP_STATUS_WRITE_FAILED;
     }
 
     // write MUX
