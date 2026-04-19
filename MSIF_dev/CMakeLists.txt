@@ -15,6 +15,8 @@ pico_sdk_init()
 add_executable(msif_dev
 	main.c
 	msif_gpio.c
+	msif_analog.c
+	../src2/dac80504_driver/dac80504.c
 )
 
 target_include_directories(msif_dev
