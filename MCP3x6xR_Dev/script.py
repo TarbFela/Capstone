@@ -2,7 +2,8 @@
 
 """
 
-ENTIRELY AI-GENERATED USING CLAUDE SONNET 4.6
+ALMOST ENTIRELY AI-GENERATED USING CLAUDE SONNET 4.6
+
 
 """
 
@@ -22,6 +23,7 @@ import sys
 import struct
 import time
 import serial
+import os
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -119,10 +121,11 @@ def main():
         print("input")
         wait_for(port, "initialized")
         print("    ADC initialized.")
+        time.sleep(0.5)
 
         # ── Step 2: second prompt to start sampling ──────────────────────────
         print("\n[2] Sending start prompt...")
-        send_prompt(port)
+        send_prompt(port, "10\n")
         wait_for(port, "input recieved")
         print("    Firmware acknowledged.")
 
@@ -147,23 +150,41 @@ def main():
 
         print(f"\n{'Index':>6}  {'Raw (hex)':>12}  {'CH':>3}  {'Value':>12}")
         print("-" * 42)
+        data = {}
+
         for i, word in enumerate(samples):
             ch, val = decode_sample(word)
+            if(str(ch) not in data.keys()): data[str(ch)] = []
+            data[str(ch)].append(val)
             print(f"{i:>6}  {word:#012x}  {ch:>3}  {val:>12}")
 
+
+        fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
+        with open("logs/" + fname, "x") as f:
+            keys = list(data.keys())
+            for key in keys: f.write(f"CH {key}, ")
+            f.write("\n")
+            for i, _ in enumerate(data[keys[0]]):
+                for key in keys:
+                    f.write(f"{data[key][i]}, ")
+                f.write("\n")
+
+
         # ── Step 5: send 'q' to exit ─────────────────────────────────────────
+        time.sleep(0.5)
         print("\n[5] Sending 'q' to reboot device...")
         # wait for the firmware's "Done." prompt first
         try:
             wait_for(port, "Done.", timeout=5.0)
         except TimeoutError:
             pass  # firmware may have already moved on
-        send_prompt(port, 'q')
+        send_prompt(port, 'q\n')
         try:
             wait_for(port, "REBOOT", timeout=3.0)
         except TimeoutError:
             pass
         print("    Done.")
+
 
 if __name__ == "__main__":
     main()
