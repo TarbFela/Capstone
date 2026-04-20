@@ -19,6 +19,7 @@
  */
 #define ADA_ADDR_GAIN_MUX           0x00
 #define ADA_GAIN_REG_MUX_OUTPUT_SCALING_1V375 0x1<<7
+#define ADA_GAIN_REG_MUX_OUTPUT_SCALING_1   0
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_16  0x0<<3
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_8   0x1<<3
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_4   0x2<<3
@@ -147,7 +148,7 @@
 
 
 typedef struct {
-    void;
+    int nothing;
 } ada_config_t;
 
 typedef struct ada_info {
@@ -157,5 +158,7 @@ typedef struct ada_info {
 } ada_info_t;
 
 void ada_spi_init(ada_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin);
+
+void ada_configure(ada_info_t *s);
 
 #endif
