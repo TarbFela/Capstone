@@ -38,7 +38,13 @@ target_link_libraries(mcp3x6xR_dev
 		hardware_pio
 		hardware_gpio
 		hardware_pwm
+		hardware_flash
 		pico_bootrom
+)
+
+target_compile_definitions(mcp3x6xR_dev PRIVATE
+		CFG_TUD_CDC_TX_BUFSIZE=512
+		CFG_TUD_CDC_RX_BUFSIZE=512
 )
 
 pico_enable_stdio_usb(mcp3x6xR_dev 1)

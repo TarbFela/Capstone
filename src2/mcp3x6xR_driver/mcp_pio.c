@@ -6,7 +6,7 @@
 #include "mcp_pio.pio.h"
 
 
-uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
+volatile uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
 
 const uint32_t dma_buff_alignment_bytes = 31 - __builtin_clz(DMA_BUFF_SIZE*sizeof(uint32_t));
 
@@ -110,7 +110,7 @@ void mcp_pio_start(mcp_pio_t *s) {
 /*
  * Reverses actions of mcp_pio_start
  */
-void mcp_pio_stop(mcp_pio_t *s) {
+void __not_in_flash_func(mcp_pio_stop)(mcp_pio_t *s) {
     pio_sm_set_enabled(s->pio, s->sm, false);
     irq_set_enabled(DMA_IRQ_0, false);
     dma_channel_set_irq0_enabled(s->dma_a, false);

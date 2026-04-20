@@ -28,13 +28,12 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     mcp_cfg_t cfg;
 
     cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_INTERNAL | MCP_CFG0_ADC_MODE_STDBY;
-    cfg.cfgs[1] = MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256;
+    cfg.cfgs[1] = MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_512;
     cfg.cfgs[2] = MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1;
     cfg.cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24;
     cfg.input_mode = MCP_SCAN_MODE;
     cfg.scan_sel = MCP_SCAN_SEL_BIT_VCM | MCP_SCAN_SEL_BIT_DIFF_A;
     mcp_configure(&mcp_1, &cfg);
-
 
     return GOOD;
 }
@@ -42,7 +41,7 @@ int adpc_adc_init(void (*dma_handler)(void)) {
 // TODO: check communication somehow.
 int adpc_adc_start() {
     // write ADC mode
-    uint8_t tx[2], rx[2];
+    uint8_t tx[5], rx[5];
     tx[0] = mcp_1.cfg.cfgs[0] | MCP_CFG0_ADC_MODE_CONV;
     mcp_write_regs(&mcp_1, tx, 1, MCP_REG_ADDR_CONFIG0);
 
@@ -52,7 +51,7 @@ int adpc_adc_start() {
     while(!gpio_get(mcp_1.nirq));
 
     gpio_put(mcp_1.cs,0); sleep_us(5);
-    spi_write_read_blocking(spi1, tx, rx, 1);
+    spi_write_read_blocking(spi1, tx, rx, 5);
 
     mcp_pio_start(&mpio_1);
     return GOOD;

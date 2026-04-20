@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "hardware/spi.h"
 
+#define sign_extend_24_to_32(x) __asm__("sbfx %0, %0, #0, #24" : "+r"(x))
+
 
 /*
  * Commands are either Incremental Write, Incremental Read, Static Read, and Fast command
