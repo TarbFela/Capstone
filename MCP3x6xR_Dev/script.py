@@ -116,58 +116,66 @@ def main():
 
         # ── Step 1: initial prompt (firmware waits for any char) ────────────
         print("\n[1] Sending initial prompt...")
-        send_prompt(port, prompt='c')
+        send_prompt(port, prompt='c\n')
         wait_for(port, "input")
-        print("input")
-        wait_for(port, "initialized")
-        print("    ADC initialized.")
-        time.sleep(0.5)
+        time.sleep(1)
+
 
         # ── Step 2: second prompt to start sampling ──────────────────────────
-        print("\n[2] Sending start prompt...")
-        send_prompt(port, "10\n")
-        wait_for(port, "input recieved")
-        print("    Firmware acknowledged.")
+        while(True):
+            while(True):
+                ui = input("Enter the number of buffers you would like (zero to reboot):")
+                try:
+                    ui = int(ui)
+                    break
+                except:
+                    print("Invalid Input.")
+            if ui == 0:
+                break
+            print("\n[2] Sending start prompt...")
+            send_prompt(port, f"{ui}\n")
+            wait_for(port, "input recieved")
+            print("    Firmware acknowledged.")
 
-        # ── Step 3: capture stream ───────────────────────────────────────────
-        print("\n[3] Waiting for stream start...")
-        wait_for(port, "STREAMING RAW DATA")
-        print("    Stream started.")
+            # ── Step 3: capture stream ───────────────────────────────────────────
+            print("\n[3] Waiting for stream start...")
+            wait_for(port, "STREAMING RAW DATA")
+            print("    Stream started.")
 
-        raw_bytes = read_raw_stream(port)
+            raw_bytes = read_raw_stream(port)
 
-        # ── Step 4: decode ───────────────────────────────────────────────────
-        n_bytes = len(raw_bytes)
-        n_words = n_bytes // BYTES_PER_WORD
-        leftover = n_bytes % BYTES_PER_WORD
+            # ── Step 4: decode ───────────────────────────────────────────────────
+            n_bytes = len(raw_bytes)
+            n_words = n_bytes // BYTES_PER_WORD
+            leftover = n_bytes % BYTES_PER_WORD
 
-        print(f"\n[4] Received {n_bytes} bytes ({n_words} samples, {leftover} leftover bytes)")
+            print(f"\n[4] Received {n_bytes} bytes ({n_words} samples, {leftover} leftover bytes)")
 
-        if leftover:
-            print(f"    WARNING: {leftover} bytes not aligned to uint32 boundary — truncating.")
+            if leftover:
+                print(f"    WARNING: {leftover} bytes not aligned to uint32 boundary — truncating.")
 
-        samples = struct.unpack_from(f"<{n_words}I", raw_bytes)
+            samples = struct.unpack_from(f"<{n_words}I", raw_bytes)
 
-        print(f"\n{'Index':>6}  {'Raw (hex)':>12}  {'CH':>3}  {'Value':>12}")
-        print("-" * 42)
-        data = {}
+            print(f"\n{'Index':>6}  {'Raw (hex)':>12}  {'CH':>3}  {'Value':>12}")
+            print("-" * 42)
+            data = {}
 
-        for i, word in enumerate(samples):
-            ch, val = decode_sample(word)
-            if(str(ch) not in data.keys()): data[str(ch)] = []
-            data[str(ch)].append(val)
-            print(f"{i:>6}  {word:#012x}  {ch:>3}  {val:>12}")
+            for i, word in enumerate(samples):
+                ch, val = decode_sample(word)
+                if(str(ch) not in data.keys()): data[str(ch)] = []
+                data[str(ch)].append(val)
+                #print(f"{i:>6}  {word:#012x}  {ch:>3}  {val:>12}")
 
 
-        fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
-        with open("logs/" + fname, "x") as f:
-            keys = list(data.keys())
-            for key in keys: f.write(f"CH {key}, ")
-            f.write("\n")
-            for i, _ in enumerate(data[keys[0]]):
-                for key in keys:
-                    f.write(f"{data[key][i]}, ")
+            fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
+            with open("logs/" + fname, "x") as f:
+                keys = list(data.keys())
+                for key in keys: f.write(f"CH {key}, ")
                 f.write("\n")
+                for i, _ in enumerate(data[keys[0]]):
+                    for key in keys:
+                        f.write(f"{data[key][i]}, ")
+                    f.write("\n")
 
 
         # ── Step 5: send 'q' to exit ─────────────────────────────────────────

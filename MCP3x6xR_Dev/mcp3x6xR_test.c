@@ -9,6 +9,8 @@
 #include "hardware/gpio.h"
 #include "pico/multicore.h"
 
+#include <string.h>
+
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "../ADPC_Dev/ADPC_cfg.h"
@@ -30,8 +32,9 @@ volatile int dma_done = 0;
 // if none, 0, if A, 1, if B, 2
 volatile int dma_last_written = 0;
 
+volatile int cc = 1;
+
 void dma_irq_handler(void) {
-    static int cc = 0;
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
@@ -42,7 +45,7 @@ void dma_irq_handler(void) {
         dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
         dma_last_written = 2;
     }
-    if(cc > 10) {
+    if(cc == 0) {
         mcp_pio_stop(&mpio_1);
         //printf("DONE!\n");
         dma_done = 1;
@@ -50,7 +53,7 @@ void dma_irq_handler(void) {
     }
     else {
         //printf("%d...",cc);
-        cc++;
+        cc--;
     }
 }
 
@@ -72,14 +75,22 @@ int main() {
     }
     printf("initialized!\n");
 
-    printf("[awaiting user input]\n");
-    scanf(" %c",ui);
-    printf("[input recieved]\n");
-    sleep_ms(100);
-    if(ui[0] == 'q') goto reboot;
+
 
 
 sample:
+    printf("To reboot enter 'q'. To read samples, enter a number.\n");
+    scanf(" %s",ui);
+    printf("[input recieved]\n");
+    if (ui[0] == 'q') goto reboot;
+    cc = atoi(ui);
+    if (cc == 0) {
+        printf("Invalid input.\n");
+        goto sample;
+    }
+    sleep_ms(100);
+    if(ui[0] == 'q') goto reboot;
+
     dma_done = 0;
     int pii = 0;
     uint bsent = 0;
@@ -106,17 +117,16 @@ sample:
     stdio_set_driver_enabled(&stdio_usb, true);
     printf("\nEND RAW DATA STREAM\n");
     printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
-    printf("Samples:\n");
-    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-        printf("[%01ld]",dma_buff[i]>>29);
-        sign_extend_24_to_32(dma_buff[i]);
-        printf(" %-10ld  ",dma_buff[i]);
-        if((i%8)==7) printf("\n",i);
-    }
+//    printf("Samples:\n");
+//    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
+//        printf("[%01ld]",dma_buff[i]>>29);
+//        sign_extend_24_to_32(dma_buff[i]);
+//        printf(" %-10ld  ",dma_buff[i]);
+//        if((i%8)==7) printf("\n",i);
+//    }
+    goto sample;
 
-    printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
-    scanf(" %c",ui);
-    if(ui[0]!='q') goto sample;
+
 
 reboot:
     printf("\n\nREBOOT!\n");
