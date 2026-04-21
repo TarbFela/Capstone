@@ -32,8 +32,11 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     cfg.cfgs[2] = MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1;
     cfg.cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24;
     cfg.input_mode = MCP_SCAN_MODE;
-    cfg.scan_sel = MCP_SCAN_SEL_BIT_VCM | MCP_SCAN_SEL_BIT_DIFF_A;
+    cfg.scan_sel = MCP_SCAN_SEL_BIT_DIFF_A | MCP_SCAN_SEL_BIT_DIFF_B;
     mcp_configure(&mcp_1, &cfg);
+
+    mcp_timer_set(&mcp_1,0);
+    mcp_scan_set_dly(&mcp_1,0);
 
     return GOOD;
 }
