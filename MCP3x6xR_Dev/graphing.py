@@ -25,7 +25,7 @@ with open(path) as f:
         data[item] = []
     for line in f:
         row = line.strip().split(",")
-        print(row)
+        #print(row)
         row = row[:-1]
         for point in zip(row,hdr):
             data[point[1]].append(float(point[0]))
