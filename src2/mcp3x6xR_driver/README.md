@@ -1,9 +1,27 @@
 # MCP3x6xR Driver for RP2040/RP2350 [WIP]
 This is a simple driver for the MCP3x6xR series ADCs that I will employ in my capstone project. They are SPI devices and I am using RP2350-based boards (namely, the Pimoroni PGA2350).
 
+The driver abstracts basic SPI interactions and provides macros for the register addresses, command structure, and register fields for these ADCs. 
+There is also a PIO program and corresponding driver to perform triggered reads of the ADC in continuous read mode. 
+Functions pass ownership of GPIO pins between RP2350 SPI and PIO machines.
+
 ### Annoying, Sneaky Hardware Requirement
 This series of ADCs seems to _require_ that the nIRQ pin be pulled to logic high externally. 
 Without this step, the **ADC WILL NOT PERFORM CONVERSIONS**.
+
+## Example Code
+
+The `MCP3x6xR_Dev` directory has an example project using this driver. This project is based around a board I've designed called the ADPC;
+if you intend to run this program on your own board you will have to define the RP2350 GPIO pins with `#define ADC_1_PIN_<name> <number>` and remove the references
+to `ADPC_cfg.h` (you may even replace it with your own `<>_cfg.h`). 
+
+The example code interfaces with a computer over USB; any serial port tool should work.
+The device uses an ASCII interface except when collecting data, when it streams raw bytes over USB CDC. 
+Providing a `"q"` input puts the RP2350 back in USB flash mode for further programming. 
+
+`script.py` automates this interface. It requires that you know the path of the USB serial device (on MacOS this is `/dev/cu.usbmodem####`).
+
+`graphing.py` graphs the received data. 
 
 ## Structure
 This is a work in progress. I am still sorting out how best to define the types and how to structure functions, etc.
@@ -15,6 +33,10 @@ uint8_t reg_val = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MC
 ```
 
 _(In this particular case, some of these values are unnecessary. Some, however, are necessary, as a default value of 0 in those fields would cause a partial shutdown, e.g.)_
+
+### Abstractions
+
+The following functionalities have since been abstracted into higher-level functions (e.g. `mcp_write_regs()`)
 
 ### Reading and Writing
 
