@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import os
 
-ls = os.listdir("logs/")
+ls = sorted(os.listdir("logs/"))
 
 for item in ls:
     print(item)
