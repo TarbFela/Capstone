@@ -15,7 +15,7 @@ pico_sdk_init()
 
 # rest of your project
 add_executable(adpc_streaming
-		mcp3x6xR_test.c
+		adpc_data_streaming.c
 	../src2/capstone_w25.c
 		mcp3x6xR_driver/mcp3x6xR.c
 		mcp3x6xR_driver/mcp_pio.c
