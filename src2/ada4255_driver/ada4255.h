@@ -20,6 +20,7 @@
 #define ADA_ADDR_GAIN_MUX           0x00
 #define ADA_GAIN_REG_MUX_OUTPUT_SCALING_1V375 0x1<<7
 #define ADA_GAIN_REG_MUX_OUTPUT_SCALING_1   0
+#define ADA_GAIN_REG_MUX_INPUT_GAIN_BITS 0x78
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_16  0x0<<3
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_8   0x1<<3
 #define ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_4   0x2<<3
@@ -160,8 +161,14 @@ typedef struct ada_info {
 
 enum ada_inputs {ADA_INPUT_1, ADA_INPUT_2, ADA_INPUT_TEST_MUX, ADA_INPUT_SHORT};
 
+enum ada_input_gains {ADA_INPUT_GAIN_DIV_16,
+    ADA_INPUT_GAIN_DIV_8,
+    ADA_INPUT_GAIN_DIV_4,
+    ADA_INPUT_GAIN_DIV_2, ADA_INPUT_GAIN_1, ADA_INPUT_GAIN_2, ADA_INPUT_GAIN_4, ADA_INPUT_GAIN_8, ADA_INPUT_GAIN_16, ADA_INPUT_GAIN_32, ADA_INPUT_GAIN_64, ADA_INPUT_GAIN_128};
+
 void ada_spi_init(ada_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin);
 int ada_input_select(ada_info_t *s, uint input);
+int ada_input_gain_select(ada_info_t *s, uint input_gain);
 
 uint8_t ada_read_reg(ada_info_t *s, uint8_t addr);
 void ada_write_reg(ada_info_t *s, uint8_t addr, uint8_t val);

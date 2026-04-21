@@ -27,17 +27,23 @@ void ada_spi_init(ada_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, in
     gpio_set_function(mosi_pin,GPIO_FUNC_SPI);
     gpio_set_function(miso_pin,GPIO_FUNC_SPI);
 
-    sleep_ms(100);
+    sleep_ms(10);
 
-    for (int i = 0; i < 2; i++) {
-        uint8_t rst[2] = {ADA_CMD_WRITE | ADA_ADDR_RESET, ADA_RESET_REG_RESET};
-        gpio_put(s->cs_pin, ADA_CS_SELECT); sleep_us(ADA_SLEEPTIME_US);
-        spi_write_blocking(s->spi, rst, 2);
-        sleep_us(ADA_SLEEPTIME_US); gpio_put(s->cs_pin, ADA_CS_DESELECT);
-        sleep_ms(150);
+    // error check
+    uint8_t derr = ada_check_digital_error(s);
+    if(derr) {
+        ada_clear_digital_error(s,derr);
     }
 
-    uint8_t derr = ada_check_digital_error(s);
+    // soft reset
+    uint8_t rst[2] = {ADA_CMD_WRITE | ADA_ADDR_RESET, ADA_RESET_REG_RESET};
+    gpio_put(s->cs_pin, ADA_CS_SELECT); sleep_us(ADA_SLEEPTIME_US);
+    spi_write_blocking(s->spi, rst, 2);
+    sleep_us(ADA_SLEEPTIME_US); gpio_put(s->cs_pin, ADA_CS_DESELECT);
+    sleep_ms(150);
+
+    // error checks
+    derr = ada_check_digital_error(s);
     if(derr) {
         ada_clear_digital_error(s,derr);
     }
@@ -69,12 +75,62 @@ int ada_input_select(ada_info_t *s, uint input) {
         default:
             return -1;
     }
+
 //    printf("is data: 0x%02X\n",data);
     ada_write_reg(s, ADA_ADDR_INPUT_MUX, data);
     uint8_t read = ada_read_reg(s, ADA_ADDR_INPUT_MUX);
 //    printf("is read: 0x%02X\n",read);
 //    printf("same? %s\n",(data==read) ? "YES" : "NO");
     if(read != data) return -2;
+    return 0;
+}
+
+// todo: maybe optimize this if the compiler isn't already fixing it.
+int ada_input_gain_select(ada_info_t *s, uint input_gain) {
+    uint8_t data = 0;
+    switch (input_gain) {
+        case ADA_INPUT_GAIN_DIV_16:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_16;
+            break;
+        case ADA_INPUT_GAIN_DIV_8:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_8;
+            break;
+        case ADA_INPUT_GAIN_DIV_4:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_4;
+            break;
+        case ADA_INPUT_GAIN_DIV_2:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_DIV_2;
+            break;
+        case ADA_INPUT_GAIN_1:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_1;
+            break;
+        case ADA_INPUT_GAIN_2:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_2;
+            break;
+        case ADA_INPUT_GAIN_4:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_4;
+            break;
+        case ADA_INPUT_GAIN_8:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_8;
+            break;
+        case ADA_INPUT_GAIN_16:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_16;
+            break;
+        case ADA_INPUT_GAIN_32:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_32;
+            break;
+        case ADA_INPUT_GAIN_64:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_64;
+            break;
+        case ADA_INPUT_GAIN_128:
+            data = ADA_GAIN_REG_MUX_INPUT_GAIN_128;
+            break;
+        default:
+            return -1;
+    }
+    ada_write_reg(s, ADA_ADDR_GAIN_MUX, data);
+    uint8_t read = ada_read_reg(s, ADA_ADDR_GAIN_MUX);
+    if ((read & ADA_GAIN_REG_MUX_INPUT_GAIN_BITS) != data) return -2;
     return 0;
 }
 
@@ -116,6 +172,7 @@ uint8_t ada_check_analog_error(ada_info_t *s) {
 void ada_clear_analog_error(ada_info_t *s, uint8_t bits) {
     ada_write_reg(s,ADA_ADDR_ANALOG_ERR,bits);
 }
+
 
 
 
