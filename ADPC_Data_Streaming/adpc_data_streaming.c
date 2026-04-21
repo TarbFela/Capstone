@@ -1,0 +1,142 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "pico/stdlib.h"
+#include "pico/bootrom.h"
+#include "hardware/spi.h"
+#include "hardware/dma.h"
+#include "hardware/irq.h"
+#include "hardware/gpio.h"
+#include "pico/multicore.h"
+
+#include <string.h>
+
+#include "mcp3x6xR_driver/mcp3x6xR.h"
+#include "mcp3x6xR_driver/mcp_pio.h"
+#include "ada4255_driver/ada4255.h"
+
+#include "../ADPC_Dev/ADPC_cfg.h"
+
+#include "../ADPC_Dev/ADPC_ADC.h"
+
+#include "tusb.h"
+
+
+volatile int dma_done = 0;
+// if none, 0, if A, 1, if B, 2
+volatile int dma_last_written = 0;
+
+volatile int cc = 1;
+
+void dma_irq_handler(void) {
+    // clear the correct interrupt
+    int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
+    if (culprit_is_a) {
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_a);
+        dma_last_written = 1;
+    }
+    else {
+        dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
+        dma_last_written = 2;
+    }
+    if(cc == 0) {
+        mcp_pio_stop(&mpio_1);
+        //printf("DONE!\n");
+        dma_done = 1;
+        cc = 0;
+    }
+    else {
+        //printf("%d...",cc);
+        cc--;
+    }
+}
+
+
+
+
+int main() {
+    stdio_init_all();
+    char ui[64];
+
+    scanf(" %c",ui);
+    printf("[input recieved]\n");
+    sleep_ms(100);
+    printf("Initializing ADPC ADC(s)\n");
+    int as = adpc_adc_init(dma_irq_handler);
+    if(as != 0) {
+        printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
+        goto reboot;
+    }
+
+    printf("Initializing ADPC PGIA\n");
+    ada_info_t ada;
+    ada_spi_init(&ada, PGIA_SPI, PGIA_PIN_MOSI, PGIA_PIN_MISO ,PGIA_PIN_CS, PGIA_PIN_SCK);
+    int ada_status = ada_input_select(&ada, ADA_INPUT_2);
+    if(ada_status) {
+        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+    }
+    ada_status = ada_input_gain_select(&ada, ADA_INPUT_GAIN_32);
+    if(ada_status) {
+        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+    }
+
+    printf("initialized!\n");
+
+
+
+sample:
+    printf("To reboot enter 'q'. To read samples, enter a number.\n");
+    scanf(" %s",ui);
+    printf("[input recieved]\n");
+    if (ui[0] == 'q') goto reboot;
+    cc = atoi(ui);
+    if (cc == 0) {
+        printf("Invalid input.\n");
+        goto sample;
+    }
+    sleep_ms(100);
+    if(ui[0] == 'q') goto reboot;
+
+    dma_done = 0;
+    int pii = 0;
+    uint bsent = 0;
+    int dma_last_printed = dma_last_written;
+    printf("STREAMING RAW DATA:\n");
+    sleep_ms(100);
+    // Mute stdio over USB
+    stdio_set_driver_enabled(&stdio_usb, false);
+    if(adpc_adc_start() != 0) {
+        printf("ADPC START ERROR!\n");
+        goto reboot;
+    }
+    while(!dma_done) {
+        while(dma_last_written == dma_last_printed) tight_loop_contents();
+        // Blast raw data
+        bsent += tud_cdc_write(dma_buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
+        tud_cdc_write_flush();
+        while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+        //tud_task();
+        dma_last_printed = dma_last_written;
+        pii ++;
+    }
+    // Restore stdio
+    stdio_set_driver_enabled(&stdio_usb, true);
+    printf("\nEND RAW DATA STREAM\n");
+    printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
+//    printf("Samples:\n");
+//    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
+//        printf("[%01ld]",dma_buff[i]>>29);
+//        sign_extend_24_to_32(dma_buff[i]);
+//        printf(" %-10ld  ",dma_buff[i]);
+//        if((i%8)==7) printf("\n",i);
+//    }
+    goto sample;
+
+
+
+reboot:
+    printf("\n\nREBOOT!\n");
+    reset_usb_boot(0,0);
+
+    return 0;
+}
