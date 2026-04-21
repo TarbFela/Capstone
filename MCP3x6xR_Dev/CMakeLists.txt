@@ -19,6 +19,7 @@ add_executable(mcp3x6xR_dev
 	../src2/capstone_w25.c
 		mcp3x6xR_driver/mcp3x6xR.c
 		mcp3x6xR_driver/mcp_pio.c
+		ada4255_driver/ada4255.c
 		../ADPC_Dev/ADPC_ADC.c
 )
 
