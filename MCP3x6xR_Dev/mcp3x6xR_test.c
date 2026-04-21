@@ -13,7 +13,7 @@
 
 #include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "mcp3x6xR_driver/mcp_pio.h"
-#include "ada4255_driver/ada4255.h"
+//#include "ada4255_driver/ada4255.h"
 
 #include "../ADPC_Dev/ADPC_cfg.h"
 
@@ -67,18 +67,18 @@ int main() {
         printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
         goto reboot;
     }
-
-    printf("Initializing ADPC PGIA\n");
-    ada_info_t ada;
-    ada_spi_init(&ada, PGIA_SPI, PGIA_PIN_MOSI, PGIA_PIN_MISO ,PGIA_PIN_CS, PGIA_PIN_SCK);
-    int ada_status = ada_input_select(&ada, ADA_INPUT_2);
-    if(ada_status) {
-        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
-    }
-    ada_status = ada_input_gain_select(&ada, ADA_INPUT_GAIN_32);
-    if(ada_status) {
-        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
-    }
+//
+//    printf("Initializing ADPC PGIA\n");
+//    ada_info_t ada;
+//    ada_spi_init(&ada, PGIA_SPI, PGIA_PIN_MOSI, PGIA_PIN_MISO ,PGIA_PIN_CS, PGIA_PIN_SCK);
+//    int ada_status = ada_input_select(&ada, ADA_INPUT_2);
+//    if(ada_status) {
+//        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+//    }
+//    ada_status = ada_input_gain_select(&ada, ADA_INPUT_GAIN_32);
+//    if(ada_status) {
+//        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+//    }
 
     printf("initialized!\n");
 
