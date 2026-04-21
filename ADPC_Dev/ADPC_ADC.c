@@ -46,9 +46,10 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     pwm_config pwmc = pwm_get_default_config();
     // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
     pwm_config_set_clkdiv(&pwmc, 6.25f);
+    pwm_init(mclk_slice,&pwmc,false);
     pwm_config_set_wrap(&pwmc, 2);
-    pwm_init(mclk_slice,&pwmc,true);
     pwm_set_chan_level(mclk_slice,mclk_chan,1);
+    pwm_set_enabled(mclk_slice, true);
 
     cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
     mcp_configure(&mcp_1, &cfg);
