@@ -3,6 +3,8 @@
 #include "../src2/mcp3x6xR_driver/mcp_pio.h"
 #include "../src2/mcp3x6xR_driver/mcp3x6xR.h"
 
+#include "hardware/pwm.h"
+
 #include <stdio.h>
 
 mcp_info_t mcp_0;
@@ -33,6 +35,22 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     cfg.cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24;
     cfg.input_mode = MCP_SCAN_MODE;
     cfg.scan_sel = MCP_SCAN_SEL_BIT_DIFF_A | MCP_SCAN_SEL_BIT_DIFF_B;
+    mcp_configure(&mcp_1, &cfg);
+
+    gpio_init(ADC_MCLK_PIN);
+    gpio_set_dir(ADC_MCLK_PIN, GPIO_OUT);
+    gpio_set_slew_rate(ADC_MCLK_PIN,GPIO_SLEW_RATE_FAST);
+    gpio_set_function(ADC_MCLK_PIN,GPIO_FUNC_PWM);
+    uint mclk_chan = pwm_gpio_to_channel(ADC_MCLK_PIN);
+    uint mclk_slice = pwm_gpio_to_slice_num(ADC_MCLK_PIN);
+    pwm_config pwmc = pwm_get_default_config();
+    // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
+    pwm_config_set_clkdiv(&pwmc, 6.25f);
+    pwm_config_set_wrap(&pwmc, 2);
+    pwm_init(mclk_slice,&pwmc,true);
+    pwm_set_chan_level(mclk_slice,mclk_chan,1);
+
+    cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
     mcp_configure(&mcp_1, &cfg);
 
     mcp_timer_set(&mcp_1,0);

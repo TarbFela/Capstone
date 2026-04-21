@@ -22,6 +22,8 @@
 #define ADC_1_PIN_IRQ       9
 #define ADC_1_SPI           spi1
 
+#define ADC_MCLK_PIN        1
+
 
 // ADA4255 programmable-gain instrumentation amplifier: TSNS amplifier
 // Sits on same SPI bus as ADC 1
