@@ -63,8 +63,8 @@ static void msif_print_banner(void) {
     printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
            "R=RESET_SCAN_DMM C=CLR_EC_DMM, "
            "S=SPEED M=MODE G=GAIN N=RANGE (inc), f=FMASS, v=FMASS_V, "
-           "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, i=ION A=ADC_SNAP, "
-           "?=help, q=BOOTSEL\n");
+           "F=SWEEP P=PARK, a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
+           "i=ION A=ADC_SNAP, ?=help, q=BOOTSEL\n");
 }
 
 // Read a number from the serial port into buf, terminated by CR/LF or timeout.
@@ -274,6 +274,109 @@ int main(void) {
                            v_cmd, v_cmd / MSIF_AMP_GAIN, v_cmd);
                 }
             }
+            // FMASS SWEEP WITH ION LOGGING: prompts for v_start, v_end, n_steps,
+            // then walks FMASS linearly while averaging ADC reads at each point.
+            // Emits CSV to stdout (capture it from the serial monitor), with a
+            // header line recording the sweep parameters so a later script can
+            // reconstruct the run. This is the Phase H calibration tool AND a
+            // TPD-style ion-current-vs-mass primitive.
+            //
+            //   Per-point time ≈ MSIF_FMASS_SETTLE_MS + MSIF_ADC_AVG_SAMPLES * ~50µs
+            //   Default: 50 ms + 1.6 ms ≈ 52 ms/point, so a 41-point 0->10V
+            //   sweep (0.25V steps) takes ~2.1 s.
+            //
+            // Any keypress aborts mid-sweep. On exit FMASS is parked at 0 V so
+            // the QMS doesn't end up stuck at some random filter voltage.
+            else if (ui == 'F') {
+                float v_start = 0.0f, v_end = 0.0f, f_steps = 0.0f;
+                if (!msif_read_float_arg("Sweep start V_QDP (V): ", &v_start)) continue;
+                if (!msif_read_float_arg("Sweep end V_QDP (V): ",   &v_end))   continue;
+                if (!msif_read_float_arg("Number of steps: ",       &f_steps)) continue;
+                int n_steps = (int)f_steps;
+                if (n_steps < 2) {
+                    printf("SWEEP: need >= 2 steps\n");
+                    continue;
+                }
+
+                printf("# SWEEP v_start=%.4f v_end=%.4f steps=%d "
+                       "samples_per_pt=%u settle_ms=%u\n",
+                       v_start, v_end, n_steps,
+                       (unsigned)MSIF_ADC_AVG_SAMPLES,
+                       (unsigned)MSIF_FMASS_SETTLE_MS);
+                printf("step,t_ms,v_fmass,ec_code,v_adc_diff,v_ec,status\n");
+
+                float dv = (v_end - v_start) / (float)(n_steps - 1);
+                bool aborted = false;
+                uint64_t t0_us = time_us_64();
+                for (int i = 0; i < n_steps; i++) {
+                    if (stdio_getchar_timeout_us(0) != PICO_ERROR_TIMEOUT) {
+                        aborted = true;
+                        break;
+                    }
+                    float v = v_start + dv * (float)i;
+                    msif_set_fmass_v(v);
+                    sleep_ms(MSIF_FMASS_SETTLE_MS);
+
+                    msif_adc_sample_t s;
+                    if (!msif_adc_read_ec_avg(MSIF_ADC_AVG_SAMPLES, &s)) {
+                        printf("# SWEEP: ADC read failed at step %d\n", i);
+                        aborted = true;
+                        break;
+                    }
+                    uint32_t t_ms = (uint32_t)((time_us_64() - t0_us) / 1000u);
+                    printf("%d,%lu,%.4f,%d,%.6f,%.6f,0x%02X\n",
+                           i, (unsigned long)t_ms, v,
+                           s.raw_code, s.v_adc_diff, s.v_ec, s.mcp_status);
+                }
+
+                msif_set_fmass_v(0.0f);
+                printf("# SWEEP %s, FMASS parked at 0 V\n",
+                       aborted ? "aborted" : "complete");
+            }
+            // PARK AND LOG: hold FMASS at a fixed voltage and stream averaged
+            // EC- readings at MSIF_ADC_PARK_PERIOD_MS intervals. Prompts for
+            // the park voltage and a duration in milliseconds (0 = run until
+            // a keypress). Use to check ion-current stability at a single
+            // mass (e.g. park at the N2 peak during Phase H and watch the
+            // drift / noise floor before committing to TPD runs).
+            else if (ui == 'P') {
+                float v_park = 0.0f, dur_ms_f = 0.0f;
+                if (!msif_read_float_arg("Park V_QDP (V): ",         &v_park))  continue;
+                if (!msif_read_float_arg("Duration ms (0=forever): ",&dur_ms_f))continue;
+                uint32_t dur_ms = (dur_ms_f < 0.0f) ? 0u : (uint32_t)dur_ms_f;
+
+                msif_set_fmass_v(v_park);
+                sleep_ms(MSIF_FMASS_SETTLE_MS);
+
+                printf("# PARK v_fmass=%.4f duration_ms=%lu period_ms=%u "
+                       "samples_per_pt=%u (press any key to stop)\n",
+                       v_park, (unsigned long)dur_ms,
+                       (unsigned)MSIF_ADC_PARK_PERIOD_MS,
+                       (unsigned)MSIF_ADC_AVG_SAMPLES);
+                printf("t_ms,ec_code,v_adc_diff,v_ec,status\n");
+
+                uint64_t t0_us = time_us_64();
+                while (1) {
+                    if (stdio_getchar_timeout_us(0) != PICO_ERROR_TIMEOUT) break;
+                    uint32_t t_ms = (uint32_t)((time_us_64() - t0_us) / 1000u);
+                    if (dur_ms > 0 && t_ms >= dur_ms) break;
+
+                    msif_adc_sample_t s;
+                    if (!msif_adc_read_ec_avg(MSIF_ADC_AVG_SAMPLES, &s)) {
+                        printf("# PARK: ADC read failed at t=%lu\n",
+                               (unsigned long)t_ms);
+                        break;
+                    }
+                    printf("%lu,%d,%.6f,%.6f,0x%02X\n",
+                           (unsigned long)t_ms,
+                           s.raw_code, s.v_adc_diff, s.v_ec, s.mcp_status);
+
+                    sleep_ms(MSIF_ADC_PARK_PERIOD_MS);
+                }
+
+                msif_set_fmass_v(0.0f);
+                printf("# PARK stopped, FMASS parked at 0 V\n");
+            }
             // SLOW CS# TOGGLE: pulses MSIF_DAC_CS_PIN (GPIO 42) at 1 Hz so a
             // DMM can visibly see the swing at the bodge wire and at U15
             // pins 11/12. Any keypress stops the loop and parks CS# HIGH.
@@ -340,8 +443,8 @@ int main(void) {
             else printf("Input received! [s=status, o=ONLINE, r=RESET c=CLR_EC, "
                         "R=RESET_DMM C=CLR_EC_DMM, "
                         "S=SPEED M=MODE G=GAIN N=RANGE, f=FMASS, v=FMASS_V, "
-                        "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, i=ION A=ADC_SNAP, "
-                        "?=help, q=BOOTSEL]\n");
+                        "F=SWEEP P=PARK, a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
+                        "i=ION A=ADC_SNAP, ?=help, q=BOOTSEL]\n");
         }
     }
 

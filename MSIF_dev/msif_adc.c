@@ -138,6 +138,33 @@ bool msif_adc_read_ec(msif_adc_sample_t *sample) {
     return true;
 }
 
+bool msif_adc_read_ec_avg(uint32_t n_samples, msif_adc_sample_t *sample) {
+    if (!s_adc_init_done || sample == NULL || n_samples == 0) return false;
+
+    claim_spi_for_adc();
+
+    /* Accumulate signed 16-bit codes into a 32-bit sum. Headroom: int32_t
+     * overflow would need > 65k samples; we'll never get anywhere close. */
+    int32_t code_accum = 0;
+    uint8_t status_or  = 0;
+    for (uint32_t i = 0; i < n_samples; i++) {
+        uint16_t raw = 0;
+        uint8_t s = mcp_single_conversion(&s_adc, &raw);
+        code_accum += (int32_t)(int16_t)raw;
+        status_or  |= s;
+    }
+
+    int16_t mean_code  = (int16_t)(code_accum / (int32_t)n_samples);
+    float   v_adc_diff = ((float)mean_code / 32768.0f) * MSIF_ADC_V_REF;
+    float   v_ec       = v_adc_diff / MSIF_ADC_INPUT_GAIN;
+
+    sample->raw_code   = mean_code;
+    sample->v_adc_diff = v_adc_diff;
+    sample->v_ec       = v_ec;
+    sample->mcp_status = status_or;
+    return true;
+}
+
 bool msif_adc_snapshot(msif_adc_snapshot_t *snap) {
     if (!s_adc_init_done || snap == NULL) return false;
 

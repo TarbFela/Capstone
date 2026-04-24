@@ -121,4 +121,22 @@
 #define MSIF_FMASS_CAL_SLOPE_V_PER_AMU  0.0f
 #define MSIF_FMASS_CAL_OFFSET_V         0.0f
 
+// ==========================================================================
+// FMASS sweep / ion-logging defaults. Used by the 'F' sweep and 'P' park
+// commands in main.c. These are compile-time knobs — edit and reflash if
+// Phase H bench testing reveals the QMS mass filter needs longer settling,
+// or if the ion-current noise floor is higher than expected.
+//
+//   SETTLE_MS: delay after a DAC write before the first ADC sample. Needs
+//     to cover the QMS-112's mass-filter RF reconfiguration time. 50 ms is
+//     a conservative guess; shorten once the bench shows faster settling.
+//   AVG_SAMPLES: ADC conversions averaged per logged point. At OSR=256 each
+//     one-shot takes ~50 µs, so 32 samples ≈ 1.6 ms of pure ADC time.
+//     Raises ENOB by ~2.5 bits over a single read.
+//   PARK_PERIOD_MS: inter-sample interval for the 'P' park-and-stream cmd.
+// ==========================================================================
+#define MSIF_FMASS_SETTLE_MS        50u
+#define MSIF_ADC_AVG_SAMPLES        32u
+#define MSIF_ADC_PARK_PERIOD_MS     100u
+
 #endif

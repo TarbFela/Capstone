@@ -55,6 +55,14 @@ void msif_adc_init(void);
  * the sample pointer is NULL. */
 bool msif_adc_read_ec(msif_adc_sample_t *sample);
 
+/* Average n_samples one-shot conversions into a single result. raw_code,
+ * v_adc_diff, and v_ec are means; mcp_status is the bitwise OR of every
+ * sample's status byte (so any error seen across the batch is visible).
+ * Returns false if the ADC isn't initialised, sample is NULL, or n_samples
+ * is 0. Use when a single reading is too noisy — at OSR=256 each conversion
+ * is ~50 µs, so 32 samples adds ~1.6 ms and ~2.5 bits of effective resolution. */
+bool msif_adc_read_ec_avg(uint32_t n_samples, msif_adc_sample_t *sample);
+
 /* Read back the ADC's CONFIG0..3, IRQ, and MUX registers for bench
  * diagnostics. Returns false if not initialised. */
 bool msif_adc_snapshot(msif_adc_snapshot_t *snap);
