@@ -17,6 +17,7 @@
 #include "MSIF_cfg.h"
 #include "msif_gpio.h"
 #include "msif_analog.h"
+#include "msif_adc.h"
 
 // Pin tables for the multi-bit MSIF output fields. LSB-first.
 static const uint msif_speed_pins[4] = {
@@ -62,7 +63,8 @@ static void msif_print_banner(void) {
     printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
            "R=RESET_SCAN_DMM C=CLR_EC_DMM, "
            "S=SPEED M=MODE G=GAIN N=RANGE (inc), f=FMASS, v=FMASS_V, "
-           "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, ?=help, q=BOOTSEL\n");
+           "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, i=ION A=ADC_SNAP, "
+           "?=help, q=BOOTSEL\n");
 }
 
 // Read a number from the serial port into buf, terminated by CR/LF or timeout.
@@ -178,6 +180,7 @@ int main(void) {
 
     msif_gpio_init();
     msif_analog_init();
+    msif_adc_init();
 
     msif_print_banner();
 
@@ -304,10 +307,41 @@ int main(void) {
                            pattern, rb, (rb == pattern) ? "OK" : "MISMATCH");
                 }
             }
+            // ION CURRENT READ: one-shot conversion of the EC- channel.
+            // Prints raw signed code, differential volts at the ADC input,
+            // and back-projected volts at the QDP EC- pin. The actual ion
+            // current in amps requires the QMS-112 electrometer transfer
+            // function per RANGE setting (TBD).
+            else if (ui == 'i') {
+                msif_adc_sample_t s;
+                if (!msif_adc_read_ec(&s)) {
+                    printf("ION: ADC layer not initialised\n");
+                } else {
+                    printf("ION: code=%d  V_adc_diff=%.6f V  V_EC=%.6f V  "
+                           "(status=0x%02X)\n",
+                           s.raw_code, s.v_adc_diff, s.v_ec, s.mcp_status);
+                }
+            }
+            // ADC REGISTER SNAPSHOT: dump CFG0..3, IRQ, MUX for bench
+            // debugging. Use after an unexpected 'i' result to see whether
+            // the configuration actually made it into the ADC.
+            else if (ui == 'A') {
+                msif_adc_snapshot_t snap;
+                if (!msif_adc_snapshot(&snap)) {
+                    printf("ADC_SNAP: ADC layer not initialised\n");
+                } else {
+                    printf("ADC_SNAP: status=0x%02X CFG0=0x%02X CFG1=0x%02X "
+                           "CFG2=0x%02X CFG3=0x%02X IRQ=0x%02X MUX=0x%02X\n",
+                           snap.mcp_status, snap.config[0], snap.config[1],
+                           snap.config[2], snap.config[3], snap.irq_reg,
+                           snap.mux_reg);
+                }
+            }
             else printf("Input received! [s=status, o=ONLINE, r=RESET c=CLR_EC, "
                         "R=RESET_DMM C=CLR_EC_DMM, "
                         "S=SPEED M=MODE G=GAIN N=RANGE, f=FMASS, v=FMASS_V, "
-                        "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, ?=help, q=BOOTSEL]\n");
+                        "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, i=ION A=ADC_SNAP, "
+                        "?=help, q=BOOTSEL]\n");
         }
     }
 

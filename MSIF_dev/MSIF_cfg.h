@@ -75,13 +75,36 @@
 #define MSIF_DAC_SDO_PIN        36          // shared ADC/DAC SDO (MISO)
 #define MSIF_DAC_BAUD_HZ        1000000u    // 1 MHz conservative; DAC80504 tolerates up to 50 MHz
 
-// MCP3462RT ADC (U18) CS# — not shared with the DAC. Keeping this line here
-// even though the ADC driver isn't written yet: msif_analog_init() parks this
-// pin HIGH so a floating gate can't randomly assert ADC CS# while the DAC is
-// mid-transaction on the shared MOSI/MISO/SCK lines. When the ADC driver
-// lands, own this pin from its own init and remove the park-high from
-// msif_analog.c.
+// ==========================================================================
+// MCP3462RT (U18) — 16-bit 4-channel differential ADC, SPI mode 0.
+// Reads the QMS ion-current path: QDP EC- → U19.5 OPA4197 unity buffer →
+// INA146 (U16/U17) difference amps → MCP3462RT VIN+/VIN-.
+//
+// Shares SPI0, SCK (38), MOSI (35), MISO (36) with the DAC80504; only
+// MSIF_ADC_CS_PIN (37) is unique. SPI mode is INCOMPATIBLE with the DAC
+// (DAC needs mode 1, ADC needs mode 0) — msif_adc.c and msif_analog.c both
+// call spi_set_format() at the top of every bus-touching public function.
+//
+// MSIF_ADC_IRQ_PIN (GPIO 32) is the MCP3462RT's nIRQ output. Per the driver
+// README, this line MUST be pulled high externally for the ADC to convert;
+// the firmware also enables the RP2350 internal pull-up as a belt-and-braces
+// defense, but a missing external pull would leave the converter silent.
+//
+// Channel assignment TBD — the two INA146 stages on the MSIF Main sheet
+// drive two of the ADC's channel pairs, and without a zoomed schematic
+// read we're assuming CH0+/CH1- is the EC- path. Confirm at the bench by
+// injecting a known DC voltage at QDP EC- and watching for a response;
+// if it's silent, cycle through the other MUX pairings in msif_adc.c.
+// ==========================================================================
 #define MSIF_ADC_CS_PIN         37
+#define MSIF_ADC_IRQ_PIN        32
+#define MSIF_ADC_SPI            MSIF_DAC_SPI    // same spi0 peripheral
+#define MSIF_ADC_V_REF          2.4f            // MCP3462R internal reference
+
+// INA146 + MSIF input network gain (V_adc_diff / V_EC at the QDP pin). Left
+// at 1.0 until measured at the bench — inject a known DC at QDP EC-, probe
+// the ADC input with a DMM, compute the ratio, and update here.
+#define MSIF_ADC_INPUT_GAIN     1.0f
 
 // DAC80504 reference and analog chain gain (see MSIF Analog schematic):
 //   V_REF = 2.5 V internal reference, GAIN register = 1× after soft reset

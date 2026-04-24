@@ -37,6 +37,7 @@
 #include <stdio.h>
 
 #include "hardware/gpio.h"
+#include "hardware/spi.h"
 
 #include "MSIF_cfg.h"
 #include "src2/dac80504_driver/dac80504.h"
@@ -47,6 +48,14 @@ static bool s_analog_init_done = false;
 
 static float msif_write_qdp_v(uint8_t ch, float v_qdp);
 static float msif_fmass_mass_to_v(float mass_amu);
+
+/* Re-assert SPI mode 1 (CPOL=0, CPHA=1) before touching the bus. Mirrors
+ * claim_spi_for_adc() in msif_adc.c — together these two wrappers let app
+ * code interleave DAC writes and ADC reads without worrying about which
+ * mode was last in effect. */
+static void claim_spi_for_dac(void) {
+    spi_set_format(MSIF_DAC_SPI, 8, SPI_CPOL_0, SPI_CPHA_1, SPI_MSB_FIRST);
+}
 
 void msif_analog_init(void) {
     /* Park the shared-bus ADC CS# (MCP3462RT / U18) HIGH before we touch the
@@ -84,7 +93,8 @@ void msif_analog_init(void) {
 }
 
 /* Internal helper: clamp to the realizable QDP range, apply amp gain
- * correction, and program the DAC. */
+ * correction, and program the DAC. Called from all four public msif_set_*
+ * functions — the SPI mode claim here covers them all. */
 static float msif_write_qdp_v(uint8_t ch, float v_qdp) {
     float v_qdp_max = MSIF_DAC_V_REF * MSIF_AMP_GAIN;
     if (v_qdp < 0.0f) {
@@ -94,6 +104,7 @@ static float msif_write_qdp_v(uint8_t ch, float v_qdp) {
         v_qdp = v_qdp_max;
     }
 
+    claim_spi_for_dac();
     float v_dac = v_qdp / MSIF_AMP_GAIN;
     dac_set_channel_v(&s_dac, ch, v_dac, MSIF_DAC_V_REF);
     return v_qdp;
@@ -136,6 +147,7 @@ bool msif_dac_loopback(uint16_t pattern, uint16_t *readback) {
         return false;
     }
 
+    claim_spi_for_dac();
     dac_write_reg(&s_dac, DAC80504_REG_DAC_A, pattern);
     *readback = dac_read_reg(&s_dac, DAC80504_REG_DAC_A);
     dac_write_reg(&s_dac, DAC80504_REG_DAC_A, 0x0000u);
@@ -147,6 +159,7 @@ bool msif_dac_snapshot(msif_dac_snapshot_t *snapshot) {
         return false;
     }
 
+    claim_spi_for_dac();
     snapshot->devid  = dac_read_reg(&s_dac, DAC80504_REG_DEVID);
     snapshot->sync   = dac_read_reg(&s_dac, DAC80504_REG_SYNC);
     snapshot->config = dac_read_reg(&s_dac, DAC80504_REG_CONFIG);

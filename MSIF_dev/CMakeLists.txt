@@ -16,7 +16,9 @@ add_executable(msif_dev
 	main.c
 	msif_gpio.c
 	msif_analog.c
+	msif_adc.c
 	../src2/dac80504_driver/dac80504.c
+	../src2/mcp3x6xR_driver/mcp3x6xR.c
 )
 
 target_include_directories(msif_dev
