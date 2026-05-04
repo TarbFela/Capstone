@@ -6,52 +6,22 @@
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"
 
-#include "hardware/adc.h"
-#include "hardware/dma.h"
-#include "hardware/pwm.h"
-#include "hardware/i2c.h"
+
 #include "hardware/gpio.h"
-#include "hardware/clocks.h"
-#include "pico/multicore.h"
+
 
 #include "MSIF_cfg.h"
 #include "msif_gpio.h"
 #include "msif_analog.h"
 #include "msif_adc.h"
+#include "msif_peak.h"
+#include "msif_proto.h"
 
-// Pin tables for the multi-bit MSIF output fields. LSB-first.
-static const uint msif_speed_pins[4] = {
-    MSIF_DO_SPEED_0_PIN, MSIF_DO_SPEED_1_PIN, MSIF_DO_SPEED_2_PIN, MSIF_DO_SPEED_3_PIN
-};
-static const uint msif_mode_pins[3]  = {
-    MSIF_DO_MODE_0_PIN, MSIF_DO_MODE_1_PIN, MSIF_DO_MODE_2_PIN
-};
-static const uint msif_gain_pins[2]  = {
-    MSIF_DO_GAIN_0_PIN, MSIF_DO_GAIN_1_PIN
-};
-static const uint msif_range_pins[2] = {
-    MSIF_DO_RANGE_0_PIN, MSIF_DO_RANGE_1_PIN
-};
+// Pin tables (msif_speed_pins / mode / gain / range) and the bit pack/unpack
+// helpers (msif_gpio_read_field, msif_gpio_write_field) live canonically in
+// msif_gpio.{h,c} — included via "msif_gpio.h" above. main.c just uses them.
 
-#define MSIF_DMM_PULSE_MS 2000
-
-// Read a multi-bit output field from latched GPIO_OUT state (LSB-first).
-// Uses gpio_get_out_level() so it's safe to call right after a write
-// (avoids the 2-cycle GPIO_IN synchronizer race).
-static uint8_t msif_read_field(const uint *pins, int nbits) {
-    uint8_t v = 0;
-    for (int i = 0; i < nbits; i++) {
-        v |= (uint8_t)((gpio_get_out_level(pins[i]) & 1) << i);
-    }
-    return v;
-}
-
-// Write a multi-bit output field (LSB-first).
-static void msif_write_field(const uint *pins, int nbits, uint8_t value) {
-    for (int i = 0; i < nbits; i++) {
-        gpio_put(pins[i], (value >> i) & 1);
-    }
-}
+#define MSIF_DMM_PULSE_MS 2000 // Allows for a 2ms pulse to be seen on a DMM
 
 // Print the hello banner and command help. Called at startup AND on '?'.
 // The startup copy is usually dropped because VS Code Serial Monitor
@@ -59,12 +29,14 @@ static void msif_write_field(const uint *pins, int nbits, uint8_t value) {
 // the pico_stdio_usb layer silently drops output with no host connected,
 // so '?' is the reliable way to retrieve this after a late connect.
 static void msif_print_banner(void) {
-    printf("Hello Capstone World!\n");
+    printf("OTHER GUY'S CAPSTONE BIG TWO SIX\n");
     printf("Commands: s=status, o=ONLINE, r=RESET_SCAN c=CLR_EC, "
            "R=RESET_SCAN_DMM C=CLR_EC_DMM, "
            "S=SPEED M=MODE G=GAIN N=RANGE (inc), f=FMASS, v=FMASS_V, "
-           "F=SWEEP P=PARK, a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
-           "i=ION A=ADC_SNAP, ?=help, q=BOOTSEL\n");
+           "F=SWEEP P=PARK, K=PK_SWEEP T=PK_PARK, "
+           "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
+           "i=EC_READ A=ADC_SNAP, ?=help, q=BOOTSEL\n");
+    printf("Protocol: ':<CMD> <args>' (e.g. ':MASS 28.5', ':HELP' for list).\n");
 }
 
 // Read a number from the serial port into buf, terminated by CR/LF or timeout.
@@ -122,10 +94,10 @@ static bool msif_read_float_arg(const char *prompt, float *value) {
     return true;
 }
 
+// Bench CLI pulse helper: delegates the actual GPIO toggle to msif_gpio_pulse
+// (canonical in msif_gpio.c) and adds a printf so the operator sees confirmation.
 static void msif_pulse_output(uint pin, uint32_t ms, const char *label) {
-    gpio_put(pin, 1);
-    sleep_ms(ms);
-    gpio_put(pin, 0);
+    msif_gpio_pulse(pin, ms);
     printf("%s pulsed (%lums)\n", label, (unsigned long)ms);
 }
 
@@ -219,29 +191,29 @@ int main(void) {
             }
             // INCREMENT SPEED (4-bit, wraps at 16)
             else if (ui == 'S') {
-                uint8_t v = (uint8_t)((msif_read_field(msif_speed_pins, 4) + 1) & 0x0F);
-                msif_write_field(msif_speed_pins, 4, v);
+                uint8_t v = (uint8_t)((msif_gpio_read_field(msif_speed_pins, 4) + 1) & 0x0F);
+                msif_gpio_write_field(msif_speed_pins, 4, v);
                 printf("SPEED=%d%d%d%d (0x%X)\n",
                     (v >> 3) & 1, (v >> 2) & 1, (v >> 1) & 1, v & 1, v);
             }
             // INCREMENT MODE (3-bit, wraps at 8)
             else if (ui == 'M') {
-                uint8_t v = (uint8_t)((msif_read_field(msif_mode_pins, 3) + 1) & 0x07);
-                msif_write_field(msif_mode_pins, 3, v);
+                uint8_t v = (uint8_t)((msif_gpio_read_field(msif_mode_pins, 3) + 1) & 0x07);
+                msif_gpio_write_field(msif_mode_pins, 3, v);
                 printf("MODE=%d%d%d (0x%X)\n",
                     (v >> 2) & 1, (v >> 1) & 1, v & 1, v);
             }
             // INCREMENT GAIN (2-bit, wraps at 4)
             else if (ui == 'G') {
-                uint8_t v = (uint8_t)((msif_read_field(msif_gain_pins, 2) + 1) & 0x03);
-                msif_write_field(msif_gain_pins, 2, v);
+                uint8_t v = (uint8_t)((msif_gpio_read_field(msif_gain_pins, 2) + 1) & 0x03);
+                msif_gpio_write_field(msif_gain_pins, 2, v);
                 printf("GAIN=%d%d (0x%X)\n",
                     (v >> 1) & 1, v & 1, v);
             }
             // INCREMENT RANGE (2-bit, wraps at 4). 'N' for raNge (r is RESET_SCAN).
             else if (ui == 'N') {
-                uint8_t v = (uint8_t)((msif_read_field(msif_range_pins, 2) + 1) & 0x03);
-                msif_write_field(msif_range_pins, 2, v);
+                uint8_t v = (uint8_t)((msif_gpio_read_field(msif_range_pins, 2) + 1) & 0x03);
+                msif_gpio_write_field(msif_range_pins, 2, v);
                 printf("RANGE=%d%d (0x%X)\n",
                     (v >> 1) & 1, v & 1, v);
             }
@@ -274,12 +246,13 @@ int main(void) {
                            v_cmd, v_cmd / MSIF_AMP_GAIN, v_cmd);
                 }
             }
-            // FMASS SWEEP WITH ION LOGGING: prompts for v_start, v_end, n_steps,
+            // FMASS SWEEP WITH EC LOGGING: prompts for v_start, v_end, n_steps,
             // then walks FMASS linearly while averaging ADC reads at each point.
             // Emits CSV to stdout (capture it from the serial monitor), with a
             // header line recording the sweep parameters so a later script can
             // reconstruct the run. This is the Phase H calibration tool AND a
-            // TPD-style ion-current-vs-mass primitive.
+            // TPD-style v_ec-vs-mass primitive (v_ec is proportional to ion
+            // current, scaled by the QMS RANGE/GAIN transfer — see msif_adc.h).
             //
             //   Per-point time ≈ MSIF_FMASS_SETTLE_MS + MSIF_ADC_AVG_SAMPLES * ~50µs
             //   Default: 50 ms + 1.6 ms ≈ 52 ms/point, so a 41-point 0->10V
@@ -336,9 +309,9 @@ int main(void) {
             // PARK AND LOG: hold FMASS at a fixed voltage and stream averaged
             // EC- readings at MSIF_ADC_PARK_PERIOD_MS intervals. Prompts for
             // the park voltage and a duration in milliseconds (0 = run until
-            // a keypress). Use to check ion-current stability at a single
-            // mass (e.g. park at the N2 peak during Phase H and watch the
-            // drift / noise floor before committing to TPD runs).
+            // a keypress). Use to check electrometer-signal stability at a
+            // single mass (e.g. park at the N2 peak during Phase H and watch
+            // the drift / noise floor before committing to TPD runs).
             else if (ui == 'P') {
                 float v_park = 0.0f, dur_ms_f = 0.0f;
                 if (!msif_read_float_arg("Park V_QDP (V): ",         &v_park))  continue;
@@ -377,6 +350,41 @@ int main(void) {
                 msif_set_fmass_v(0.0f);
                 printf("# PARK stopped, FMASS parked at 0 V\n");
             }
+            // PEAK SWEEP: mass-domain integration. Steps FMASS from
+            // mass_start_amu to mass_end_amu in n_steps points (settle +
+            // averaged ADC at each), trapezoid-integrates v_ec(mass), and
+            // prints area + intensity-weighted centroid + max. Per-step CSV
+            // matches 'F' with mass_amu added as the 3rd column. Uses
+            // bench-measured FMASS calibration if MSIF_FMASS_CAL_BENCH_VERIFIED
+            // is set in MSIF_cfg.h, else falls back to the QMS-112 spec default
+            // (10V / MSIF_QMS_MASS_RANGE) and prints a loud warning. Any
+            // keypress aborts; FMASS is parked at 0 V on every exit path.
+            else if (ui == 'K') {
+                float m_start = 0.0f, m_end = 0.0f, f_steps = 0.0f;
+                if (!msif_read_float_arg("Peak mass start (AMU): ", &m_start)) continue;
+                if (!msif_read_float_arg("Peak mass end (AMU): ",   &m_end))   continue;
+                if (!msif_read_float_arg("Number of steps: ",       &f_steps)) continue;
+                if (f_steps < 0.0f) f_steps = 0.0f;
+                msif_peak_result_t r;
+                (void)msif_peak_sweep_mass(m_start, m_end,
+                                           (uint32_t)f_steps, &r);
+            }
+            // PEAK PARK: time-domain integration. Holds FMASS at v_qdp_park
+            // for duration_ms, sampling at MSIF_ADC_PARK_PERIOD_MS cadence.
+            // Trapezoid-integrates v_ec(t), reports area in V*s plus mean
+            // v_ec. Same CSV columns as 'P' with t_s added. Bounded by
+            // MSIF_PEAK_PARK_MAX_MS; any keypress aborts; FMASS parks to 0 V.
+            else if (ui == 'T') {
+                float v_park = 0.0f, dur_ms_f = 0.0f;
+                if (!msif_read_float_arg("Park V_QDP (V): ",         &v_park))   continue;
+                if (!msif_read_float_arg("Duration ms (>0 required): ", &dur_ms_f)) continue;
+                if (dur_ms_f <= 0.0f) {
+                    printf("PK_PARK: duration must be > 0\n");
+                    continue;
+                }
+                msif_peak_result_t r;
+                (void)msif_peak_park_time(v_park, (uint32_t)dur_ms_f, &r);
+            }
             // SLOW CS# TOGGLE: pulses MSIF_DAC_CS_PIN (GPIO 42) at 1 Hz so a
             // DMM can visibly see the swing at the bodge wire and at U15
             // pins 11/12. Any keypress stops the loop and parks CS# HIGH.
@@ -410,17 +418,19 @@ int main(void) {
                            pattern, rb, (rb == pattern) ? "OK" : "MISMATCH");
                 }
             }
-            // ION CURRENT READ: one-shot conversion of the EC- channel.
+            // EC READ: one-shot conversion of the EC- differential channel.
             // Prints raw signed code, differential volts at the ADC input,
-            // and back-projected volts at the QDP EC- pin. The actual ion
-            // current in amps requires the QMS-112 electrometer transfer
-            // function per RANGE setting (TBD).
+            // and back-projected volts at the QDP EC- pin. v_ec is what the
+            // QMS post-amp is outputting at this instant — proportional to
+            // ion current via the RANGE/GAIN transfer table in QMS-112 manual
+            // sec 10.2.1.1, but that conversion is not yet wired into the
+            // firmware (so this command reports volts, not amps).
             else if (ui == 'i') {
                 msif_adc_sample_t s;
                 if (!msif_adc_read_ec(&s)) {
-                    printf("ION: ADC layer not initialised\n");
+                    printf("EC: ADC layer not initialised\n");
                 } else {
-                    printf("ION: code=%d  V_adc_diff=%.6f V  V_EC=%.6f V  "
+                    printf("EC: code=%d  V_adc_diff=%.6f V  V_EC=%.6f V  "
                            "(status=0x%02X)\n",
                            s.raw_code, s.v_adc_diff, s.v_ec, s.mcp_status);
                 }
@@ -440,11 +450,29 @@ int main(void) {
                            snap.mux_reg);
                 }
             }
+            // PROTOCOL: ':' starts a line-mode machine protocol command. The
+            // existing single-letter CLI is unchanged — operators keep
+            // pressing single keys, scripts/peer-controllers send full
+            // ':CMD args\n' lines instead. Both USB and UART input land
+            // here (stdio_uart is enabled in CMakeLists with TX/RX remapped
+            // to GP12/GP13 per the MSIF MCU schematic).
+            else if (ui == ':') {
+                char line[MSIF_PROTO_LINE_MAX];
+                int n = msif_read_line(line, sizeof(line), 1000 * 1000);
+                if (n > 0) {
+                    if (!msif_proto_handle_line(line)) {
+                        printf("# ERR protocol command failed\n");
+                    }
+                } else {
+                    printf("# ERR :timeout (no command after colon)\n");
+                }
+            }
             else printf("Input received! [s=status, o=ONLINE, r=RESET c=CLR_EC, "
                         "R=RESET_DMM C=CLR_EC_DMM, "
                         "S=SPEED M=MODE G=GAIN N=RANGE, f=FMASS, v=FMASS_V, "
-                        "F=SWEEP P=PARK, a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
-                        "i=ION A=ADC_SNAP, ?=help, q=BOOTSEL]\n");
+                        "F=SWEEP P=PARK, K=PK_SWEEP T=PK_PARK, "
+                        "a=ANALOG, d=CS_TOGGLE l=LOOPBACK, "
+                        "i=EC_READ A=ADC_SNAP, :CMD=protocol, ?=help, q=BOOTSEL]\n");
         }
     }
 

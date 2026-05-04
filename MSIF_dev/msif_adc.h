@@ -1,11 +1,21 @@
 /*
- * msif_adc.h — board-level wrapper for the MCP3462RT ion-current ADC.
+ * msif_adc.h — board-level wrapper for the MCP3462RT EC-voltage ADC.
  *
- * The QMS electrometer signal enters MSIF at QDP pin `EC-`, gets buffered by
- * U19.5 (OPA4197, unity follower), runs through an INA146 difference-amp
- * stage (U16/U17), and lands at the MCP3462RT's differential inputs. This
- * module hides the mcp3x6xR driver and the input-network gain from the rest
- * of the app.
+ * IMPORTANT: this ADC reads a VOLTAGE, not a current. The QMS-112's internal
+ * electrometer (manual sec 9.2.3) does the I->V conversion: ions hit the
+ * collector, the high-impedance input-stage resistors do current-to-voltage,
+ * the post-amp + RANGE + GAIN scale that to a 0..10 V differential signal at
+ * the QDP EC+/EC- pins. By the time the signal reaches MSIF, the unit is V.
+ *
+ * To recover ion current in amps from v_ec, multiply by the per-RANGE/GAIN
+ * transfer factor in QMS-112 manual sec 10.2.1.1 / sec 9.1.2.3 (e.g. RANGE=
+ * 10^-7, GAIN=x100 -> 10 V FS = 10^-7 A FS, so 1 V at EC = 10^-8 A). That
+ * conversion table is NOT yet codified in firmware — every CSV column and
+ * every peak-summary "area" reported is in volt-units, not ampere-units.
+ *
+ * Signal path on the MSIF board:
+ *   QDP EC- -> U19.5 (OPA4197 unity follower) -> INA146 difference amp
+ *           -> MCP3462RT differential input.
  *
  * Usage from main.c:
  *   msif_adc_init();                  // after msif_analog_init()
@@ -20,8 +30,9 @@
  * Open items to resolve at the bench:
  *   - which MUX pair is the actual EC- path (assumed CH0+/CH1-)
  *   - INA146 + input-divider gain (MSIF_ADC_INPUT_GAIN in MSIF_cfg.h)
- *   - V_EC -> ion current conversion per QMS RANGE setting (needs service
- *     manual or a known-current calibration source)
+ *   - per-RANGE/GAIN V_EC -> ion-current (amps) transfer table — needs the
+ *     QMS-112 manual sec 10.2.1.1 / 9.1.2.3 cross-product table baked in,
+ *     or a known-current calibration source for the live system
  */
 
 #ifndef MSIF_ADC_H

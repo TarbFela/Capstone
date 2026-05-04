@@ -77,7 +77,11 @@
 
 // ==========================================================================
 // MCP3462RT (U18) — 16-bit 4-channel differential ADC, SPI mode 0.
-// Reads the QMS ion-current path: QDP EC- → U19.5 OPA4197 unity buffer →
+// Reads the QMS electrometer voltage at QDP EC-/EC+. The QMS does I->V
+// conversion internally (manual sec 9.2.3); this ADC just digitises the
+// resulting voltage. To recover ion current in amps the per-RANGE/GAIN
+// transfer factor (manual sec 10.2.1.1) has to be applied — currently TBD
+// in firmware. Signal path: QDP EC- → U19.5 OPA4197 unity buffer →
 // INA146 (U16/U17) difference amps → MCP3462RT VIN+/VIN-.
 //
 // Shares SPI0, SCK (38), MOSI (35), MISO (36) with the DAC80504; only
@@ -125,7 +129,7 @@
 // FMASS sweep / ion-logging defaults. Used by the 'F' sweep and 'P' park
 // commands in main.c. These are compile-time knobs — edit and reflash if
 // Phase H bench testing reveals the QMS mass filter needs longer settling,
-// or if the ion-current noise floor is higher than expected.
+// or if the electrometer-signal noise floor is higher than expected.
 //
 //   SETTLE_MS: delay after a DAC write before the first ADC sample. Needs
 //     to cover the QMS-112's mass-filter RF reconfiguration time. 50 ms is
@@ -138,5 +142,54 @@
 #define MSIF_FMASS_SETTLE_MS        50u
 #define MSIF_ADC_AVG_SAMPLES        32u
 #define MSIF_ADC_PARK_PERIOD_MS     100u
+
+// ==========================================================================
+// Peak-integration defaults (msif_peak.c).
+//
+//   QMS_MASS_RANGE: the QMS-112's configured mass range (100 or 200 AMU,
+//     selectable on the service panel via jumper J6/J7 per QMS-112 manual
+//     sec 9.1.4). Used to compute the spec-default FMASS slope of
+//     10V / mass_range when the bench-measured slope hasn't been recorded yet
+//     (per QMS-112 manual sec 10.2.2.1: U_FMASS+ = (FIRST_MASS / range) * 10V).
+//
+//   FMASS_CAL_BENCH_VERIFIED: flip to 1 once a Phase H sweep against a
+//     calibrated gas (N2 at 28 AMU, H2O at 18, Ar at 40) has been run and
+//     the resulting slope/offset values above have been committed. Until
+//     then, msif_peak_print_cal_status() prints a loud warning at every
+//     peak invocation.
+//
+//   PEAK_SWEEP_MIN/MAX_STEPS: trapezoidal area needs >= 2 intervals (3 pts).
+//     Upper bound guards against accidentally-huge sweeps that lock up the
+//     CLI for minutes.
+//
+//   PEAK_PARK_MAX_MS: 10-min hard stop on time-domain integration. Operator
+//     can still abort with any keypress.
+// ==========================================================================
+#define MSIF_QMS_MASS_RANGE             100u
+#define MSIF_FMASS_CAL_BENCH_VERIFIED   0
+#define MSIF_PEAK_SWEEP_MIN_STEPS       3u
+#define MSIF_PEAK_SWEEP_MAX_STEPS       2001u
+#define MSIF_PEAK_PARK_MAX_MS           600000u
+
+// ==========================================================================
+// UART to master / ADPC controller. Per MSIF MCU schematic:
+//   PGA2350 GP12 -> MSIF_UART_TX -> ISO6721RBDR INB  (RP2350 -> isolator)
+//   PGA2350 GP13 <- MSIF_UART_RX <- ISO6721RBDR OUTA (isolator -> RP2350)
+//
+// CMakeLists.txt remaps PICO_DEFAULT_UART_TX_PIN / _RX_PIN to 12/13 so the
+// SDK's stdio_uart automatically uses these. Both stdio_usb AND stdio_uart
+// are enabled — printf is mirrored to both, getchar reads from either.
+// That lets msif_proto.c's line parser accept commands from a USB host OR
+// from the master controller across the isolated UART link, with no
+// per-channel parser duplication.
+//
+// Baud is conservative; the ISO6721 is rated to 100 Mbps so we're far below
+// the isolator's limit. ISO6721 also requires both VCC1 and VCC2 powered —
+// see schematic note about ADPC/MSIF supply rail dependency.
+// ==========================================================================
+#define MSIF_UART                       uart0
+#define MSIF_UART_TX_PIN                12
+#define MSIF_UART_RX_PIN                13
+#define MSIF_UART_BAUD                  115200u
 
 #endif

@@ -1,5 +1,12 @@
 /*
- * msif_adc.c — board-level wrapper for MCP3462RT ion-current ADC.
+ * msif_adc.c — board-level wrapper for the MCP3462RT EC-voltage ADC.
+ *
+ * NOTE on units: this reads a VOLTAGE (the QMS post-amp output at QDP
+ * EC+/EC-), not a current. The QMS-112 does I->V conversion internally
+ * (manual sec 9.2.3); we just digitize the result. v_ec in the sample
+ * struct is volts at the QDP EC- pin. To recover ion current in amps,
+ * multiply by the per-RANGE/GAIN transfer factor from manual sec 10.2.1.1
+ * / sec 9.1.2.3 — that table is not yet in firmware.
  *
  * Signal chain (MS ANALOG IN side of the MSIF Main schematic):
  *   QDP EC-  ->  U19.5 OPA4197 unity buffer  ->  EC-_BUFF
@@ -21,10 +28,12 @@
  *   - MSIF_ADC_INPUT_GAIN is set to 1.0 until a known DC voltage is injected
  *     at QDP EC- and the ADC-input ratio is measured. Update MSIF_cfg.h
  *     once you have real numbers.
- *   - Sign of EC-: ion current produces a negative-going voltage swing at
- *     the electrometer output. With CH0+/CH1- wired as assumed, a positive
- *     ADC code means ion current flowing. Verify polarity at the bench
- *     before trusting the sign in downstream TPD math.
+ *   - Sign convention at EC: ions on the collector produce a defined-polarity
+ *     swing at the QMS post-amp output. With CH0+/CH1- wired as assumed, a
+ *     positive ADC code is intended to mean "the QMS post-amp is showing
+ *     ions on the collector," but the actual sign has to be confirmed at
+ *     the bench against a known polarity input — and re-confirmed under
+ *     real ions, because injected DC and post-amp output may differ in sign.
  */
 
 #include "msif_adc.h"
