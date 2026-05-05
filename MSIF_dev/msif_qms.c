@@ -135,21 +135,10 @@ int msif_qms_parse_gain(const char *s) {
 /* ----- analog setters --------------------------------------------------- */
 
 float msif_qms_set_swidth_amu(float width_amu) {
-    /* Same calibration logic as msif_peak.c sweep — use stored slope if it
-     * has been bench-verified, else fall back to the QMS-spec default
-     * 10V / mass_range. SWIDTH has no offset term per the spec equation. */
-    float slope;
-#if MSIF_FMASS_CAL_BENCH_VERIFIED
-    slope = (MSIF_FMASS_CAL_SLOPE_V_PER_AMU != 0.0f)
-            ? MSIF_FMASS_CAL_SLOPE_V_PER_AMU
-            : (10.0f / (float)MSIF_QMS_MASS_RANGE);
-#else
-    slope = (MSIF_FMASS_CAL_SLOPE_V_PER_AMU != 0.0f)
-            ? MSIF_FMASS_CAL_SLOPE_V_PER_AMU
-            : (10.0f / (float)MSIF_QMS_MASS_RANGE);
-#endif
-
-    float v_qdp = slope * width_amu;
+    /* Per QMS-112 manual sec 10.2.2.2: U_SWIDTH = (WIDTH_AMU / mass_range) * 10V.
+     * Re-uses the FMASS slope since both share the same V/AMU transfer. No
+     * offset term in the spec equation. */
+    float v_qdp = MSIF_FMASS_CAL_SLOPE_V_PER_AMU * width_amu;
     if (v_qdp < 0.0f) v_qdp = 0.0f;
     return msif_set_swidth_v(v_qdp);
 }

@@ -121,9 +121,7 @@ static bool h_mass(int argc, char **argv) {
     float m;
     if (argc != 2 || !parse_float(argv[1], &m)) return err("usage: MASS <amu>");
     float v = msif_set_fmass(m);
-    printf("# OK MASS amu=%.4f v_qdp=%.4f cal=%s\n",
-           (double)m, (double)v,
-           msif_fmass_is_calibrated() ? "loaded" : "spec_default");
+    printf("# OK MASS amu=%.4f v_qdp=%.4f\n", (double)m, (double)v);
     return true;
 }
 

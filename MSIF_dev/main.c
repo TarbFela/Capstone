@@ -114,8 +114,7 @@ static void msif_print_analog_status(void) {
            snap.devid, snap.sync, snap.config, snap.gain, snap.status);
     printf("DAC: A=0x%04X B=0x%04X C=0x%04X D=0x%04X\n",
            snap.dac[0], snap.dac[1], snap.dac[2], snap.dac[3]);
-    printf("FMASS calibration: %s (slope=%.6f V/AMU, offset=%.6f V)\n",
-           msif_fmass_is_calibrated() ? "loaded" : "NOT LOADED",
+    printf("FMASS calibration: slope=%.6f V/AMU, offset=%.6f V\n",
            MSIF_FMASS_CAL_SLOPE_V_PER_AMU,
            MSIF_FMASS_CAL_OFFSET_V);
 }
@@ -227,16 +226,12 @@ int main(void) {
                 float m;
                 if (msif_read_float_arg("FMASS mass (AMU): ", &m)) {
                     float v_qdp = msif_set_fmass(m);
-                    if (!msif_fmass_is_calibrated()) {
-                        printf("FMASS: calibration slope is still zero in "
-                               "MSIF_cfg.h; use 'v' for direct voltage checks\n");
-                    }
                     printf("FMASS: mass=%.2f AMU -> target V_QDP=%.4f V "
                            "(verify with DMM at QDP FMASS+ pin)\n", m, v_qdp);
                 }
             }
             // SET FMASS VOLTAGE DIRECTLY AT THE QDP CONNECTOR.
-            // Useful before the Phase H mass calibration exists.
+            // Bypasses the AMU calibration; useful for direct voltage checks at the bench.
             else if (ui == 'v') {
                 float v_qdp;
                 if (msif_read_float_arg("FMASS target V_QDP (V): ", &v_qdp)) {
@@ -250,7 +245,7 @@ int main(void) {
             // then walks FMASS linearly while averaging ADC reads at each point.
             // Emits CSV to stdout (capture it from the serial monitor), with a
             // header line recording the sweep parameters so a later script can
-            // reconstruct the run. This is the Phase H calibration tool AND a
+            // reconstruct the run. Used both for bench calibration and as a
             // TPD-style v_ec-vs-mass primitive (v_ec is proportional to ion
             // current, scaled by the QMS RANGE/GAIN transfer — see msif_adc.h).
             //
@@ -310,8 +305,8 @@ int main(void) {
             // EC- readings at MSIF_ADC_PARK_PERIOD_MS intervals. Prompts for
             // the park voltage and a duration in milliseconds (0 = run until
             // a keypress). Use to check electrometer-signal stability at a
-            // single mass (e.g. park at the N2 peak during Phase H and watch
-            // the drift / noise floor before committing to TPD runs).
+            // single mass (e.g. park at the N2 peak and watch the drift /
+            // noise floor before committing to TPD runs).
             else if (ui == 'P') {
                 float v_park = 0.0f, dur_ms_f = 0.0f;
                 if (!msif_read_float_arg("Park V_QDP (V): ",         &v_park))  continue;
@@ -354,11 +349,10 @@ int main(void) {
             // mass_start_amu to mass_end_amu in n_steps points (settle +
             // averaged ADC at each), trapezoid-integrates v_ec(mass), and
             // prints area + intensity-weighted centroid + max. Per-step CSV
-            // matches 'F' with mass_amu added as the 3rd column. Uses
-            // bench-measured FMASS calibration if MSIF_FMASS_CAL_BENCH_VERIFIED
-            // is set in MSIF_cfg.h, else falls back to the QMS-112 spec default
-            // (10V / MSIF_QMS_MASS_RANGE) and prints a loud warning. Any
-            // keypress aborts; FMASS is parked at 0 V on every exit path.
+            // matches 'F' with mass_amu added as the 3rd column. Uses the
+            // FMASS slope/offset from MSIF_cfg.h (defaulted to QMS-112 spec
+            // values; replace with bench-measured values after calibration).
+            // Any keypress aborts; FMASS is parked at 0 V on every exit path.
             else if (ui == 'K') {
                 float m_start = 0.0f, m_end = 0.0f, f_steps = 0.0f;
                 if (!msif_read_float_arg("Peak mass start (AMU): ", &m_start)) continue;

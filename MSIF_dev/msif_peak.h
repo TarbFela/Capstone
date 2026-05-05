@@ -22,11 +22,10 @@
  * Both functions park FMASS at 0 V on every exit path (success, ADC error,
  * user keypress abort).
  *
- * Calibration: until MSIF_FMASS_CAL_BENCH_VERIFIED is flipped to 1 in
- * MSIF_cfg.h, msif_peak_print_cal_status() prints a loud banner reminding
- * the operator that the slope is a QMS-112 spec default
- * (10 V / MSIF_QMS_MASS_RANGE), not a bench-measured value. Sweep falls
- * back to the spec default if the stored slope is 0.
+ * Calibration: msif_peak_print_cal_status() prints the active FMASS
+ * slope/offset from MSIF_cfg.h before each peak run. Defaults are the
+ * QMS-112 spec values (slope = 10V / MSIF_QMS_MASS_RANGE, offset = 0);
+ * update them after a bench sweep against a known peak.
  */
 #ifndef MSIF_PEAK_H
 #define MSIF_PEAK_H
@@ -37,7 +36,6 @@
 typedef enum {
     MSIF_PEAK_OK = 0,
     MSIF_PEAK_ERR_ARGS,        /* bad n_steps / duration / window direction */
-    MSIF_PEAK_ERR_CAL_ZERO,    /* bench-verified flag set but slope is 0 */
     MSIF_PEAK_ERR_ADC,         /* msif_adc_read_ec_avg() returned false */
     MSIF_PEAK_ERR_ABORTED      /* user keypress mid-run */
 } msif_peak_status_t;

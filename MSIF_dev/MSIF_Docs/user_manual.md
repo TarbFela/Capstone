@@ -403,21 +403,14 @@ reboots into the new firmware automatically.
 
 ## 10. Calibration note
 
-The firmware ships with the FMASS slope set to a placeholder value derived
-from the QMS-112 manual (`10 V / mass_range`, default `0.1 V/AMU`). Every
-peak command (`K`, `T`, `:SWEEP`, `:DWELL`) prints a multi-line warning
-banner reminding you of this. The placeholder is functional — the
-firmware will move FMASS to a real voltage that's the right order of
-magnitude — but is not the same as a measured per-board calibration.
+The firmware ships with the FMASS slope set to the QMS-112 spec value
+(`10 V / mass_range`). For the 200-AMU range that's 0.05 V/AMU with no
+offset. Every peak command (`K`, `T`, `:SWEEP`, `:DWELL`) prints the
+active slope/offset before each run.
 
-When the board has been calibrated against a known gas peak, the values
-in `MSIF_cfg.h` should be updated and `MSIF_FMASS_CAL_BENCH_VERIFIED` set
-to 1. After reflashing, the warning banner becomes a single one-line
-acknowledgement and the calibrated slope is used in place of the spec
-default.
-
-The manual is intentionally silent on how to do that calibration; it
-belongs in the bench-test plan, not here.
+To replace the spec default with a bench-measured value, edit
+`MSIF_FMASS_CAL_SLOPE_V_PER_AMU` and `MSIF_FMASS_CAL_OFFSET_V` in
+`MSIF_cfg.h` and reflash. That's it.
 
 ---
 

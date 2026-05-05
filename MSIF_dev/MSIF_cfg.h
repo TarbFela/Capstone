@@ -15,8 +15,7 @@
 //   gpio_get(MSIF_DI_EMIS_OK_PIN) == 1         --> emission is OK
 //   gpio_get(MSIF_DI_SCAN_IN_PROGRESS_PIN) == 1 --> scan in progress
 // External 10k pull-ups to 3V3 on U21 inputs (R48, R49) — no internal pulls
-// needed. NOTE: input-idle polarity is still unconfirmed at the bench; see
-// sleepy-swinging-volcano.md Phase C.
+// needed. NOTE: input-idle polarity is still unconfirmed at the bench.
 #define MSIF_DI_EMIS_OK_PIN             30
 #define MSIF_DI_SCAN_IN_PROGRESS_PIN    31
 
@@ -120,16 +119,21 @@
 #define MSIF_DAC_V_REF          2.5f
 #define MSIF_AMP_GAIN           4.0f
 
-// FMASS+ bench calibration (fill after Phase H voltage sweep — see
-// sleepy-swinging-volcano.md). V_QDP = SLOPE × mass_amu + OFFSET.
-#define MSIF_FMASS_CAL_SLOPE_V_PER_AMU  0.0f
+// FMASS+ calibration. V_QDP = SLOPE × mass_amu + OFFSET.
+//
+// Default values come straight from the QMS-112 manual (sec 10.2.2.1):
+//   U_FMASS+ = (FIRST_MASS / mass_range) × 10V
+// For the 200-AMU range that's 0.05 V/AMU with no offset. After the Phase
+// H bench sweep against a known peak (N2 at 28, H2O at 18, Ar at 40),
+// REPLACE THESE TWO NUMBERS with the bench-measured values and reflash.
+#define MSIF_FMASS_CAL_SLOPE_V_PER_AMU  0.05f
 #define MSIF_FMASS_CAL_OFFSET_V         0.0f
 
 // ==========================================================================
 // FMASS sweep / ion-logging defaults. Used by the 'F' sweep and 'P' park
 // commands in main.c. These are compile-time knobs — edit and reflash if
-// Phase H bench testing reveals the QMS mass filter needs longer settling,
-// or if the electrometer-signal noise floor is higher than expected.
+// bench testing reveals the QMS mass filter needs longer settling, or if
+// the electrometer-signal noise floor is higher than expected.
 //
 //   SETTLE_MS: delay after a DAC write before the first ADC sample. Needs
 //     to cover the QMS-112's mass-filter RF reconfiguration time. 50 ms is
@@ -148,15 +152,8 @@
 //
 //   QMS_MASS_RANGE: the QMS-112's configured mass range (100 or 200 AMU,
 //     selectable on the service panel via jumper J6/J7 per QMS-112 manual
-//     sec 9.1.4). Used to compute the spec-default FMASS slope of
-//     10V / mass_range when the bench-measured slope hasn't been recorded yet
-//     (per QMS-112 manual sec 10.2.2.1: U_FMASS+ = (FIRST_MASS / range) * 10V).
-//
-//   FMASS_CAL_BENCH_VERIFIED: flip to 1 once a Phase H sweep against a
-//     calibrated gas (N2 at 28 AMU, H2O at 18, Ar at 40) has been run and
-//     the resulting slope/offset values above have been committed. Until
-//     then, msif_peak_print_cal_status() prints a loud warning at every
-//     peak invocation.
+//     sec 9.1.4). Used by SWIDTH formula in msif_qms.c. Must match the
+//     physical QMS jumper setting AND the FMASS slope above (10V/range).
 //
 //   PEAK_SWEEP_MIN/MAX_STEPS: trapezoidal area needs >= 2 intervals (3 pts).
 //     Upper bound guards against accidentally-huge sweeps that lock up the
@@ -165,8 +162,7 @@
 //   PEAK_PARK_MAX_MS: 10-min hard stop on time-domain integration. Operator
 //     can still abort with any keypress.
 // ==========================================================================
-#define MSIF_QMS_MASS_RANGE             100u
-#define MSIF_FMASS_CAL_BENCH_VERIFIED   0
+#define MSIF_QMS_MASS_RANGE             200u
 #define MSIF_PEAK_SWEEP_MIN_STEPS       3u
 #define MSIF_PEAK_SWEEP_MAX_STEPS       2001u
 #define MSIF_PEAK_PARK_MAX_MS           600000u

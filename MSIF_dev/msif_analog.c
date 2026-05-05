@@ -24,12 +24,11 @@
  *
  *   V_QDP    = AMP_GAIN × V_DAC   where AMP_GAIN ≈ 4 V/V on this schematic
  *   V_DAC    = V_QDP / AMP_GAIN           (what we program into the DAC)
- *   V_QDP(m) = SLOPE × mass_amu + OFFSET   (bench-measured Phase H)
+ *   V_QDP(m) = SLOPE × mass_amu + OFFSET   (bench-measured)
  *
- * Until Phase H is run, SLOPE and OFFSET are zero and msif_set_fmass will
- * command V_DAC = 0 regardless of input. That's safe (DAC at rail-low) but
- * also useless for mass selection — don't expect anything until the sweep
- * constants are filled in.
+ * SLOPE and OFFSET default to the QMS-112 manual values (10V/range, 0V) so
+ * the firmware is functional out of the box. A bench sweep against a
+ * known gas peak refines them; values live in MSIF_cfg.h.
  */
 
 #include "msif_analog.h"
@@ -113,10 +112,6 @@ static float msif_write_qdp_v(uint8_t ch, float v_qdp) {
 static float msif_fmass_mass_to_v(float mass_amu) {
     return MSIF_FMASS_CAL_SLOPE_V_PER_AMU * mass_amu
          + MSIF_FMASS_CAL_OFFSET_V;
-}
-
-bool msif_fmass_is_calibrated(void) {
-    return MSIF_FMASS_CAL_SLOPE_V_PER_AMU != 0.0f;
 }
 
 float msif_set_fmass(float mass_amu) {

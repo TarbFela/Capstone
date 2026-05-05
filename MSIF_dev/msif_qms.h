@@ -162,10 +162,8 @@ int msif_qms_parse_gain(const char *s);    /* "x1"/"x10"/"x100"/"auto" */
 
 /* Set SWIDTH+ from a width in AMU. Per QMS-112 manual sec 10.2.2.2:
  *   U_SWIDTH = (WIDTH_AMU / MSIF_QMS_MASS_RANGE) * 10V
- * Uses the same FMASS calibration sentinel logic as msif_peak.c — if
- * MSIF_FMASS_CAL_SLOPE_V_PER_AMU is non-zero and BENCH_VERIFIED, that
- * slope is used; otherwise the spec default 10V/MSIF_QMS_MASS_RANGE
- * applies. Returns the clamped V_QDP target actually commanded. */
+ * Re-uses the FMASS slope from MSIF_cfg.h (same V/AMU transfer). Returns
+ * the clamped V_QDP target actually commanded. */
 float msif_qms_set_swidth_amu(float width_amu);
 
 /* Set SEM+ from a high-voltage value in kV. Per QMS-112 manual sec 10.2.4:

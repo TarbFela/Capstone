@@ -78,57 +78,20 @@ static inline void msif_peak_acc_push(msif_peak_acc_t *a, float x, float y) {
 /* ------------------------------------------------------------------ */
 
 bool msif_peak_print_cal_status(void) {
-#if MSIF_FMASS_CAL_BENCH_VERIFIED
-    const float stored_slope  = MSIF_FMASS_CAL_SLOPE_V_PER_AMU;
-    const float stored_offset = MSIF_FMASS_CAL_OFFSET_V;
-    if (stored_slope == 0.0f) {
-        printf("# CAL_STATUS: !!! FLAG_SET_BUT_SLOPE_ZERO -- fix MSIF_cfg.h !!!\n");
-        return true;
-    }
-    printf("# CAL_STATUS: BENCH_VERIFIED slope=%.6f V/AMU offset=%.6f V\n",
-           (double)stored_slope, (double)stored_offset);
+    /* Calibration is whatever's stored in MSIF_cfg.h. Defaults are the
+     * QMS-112 spec values (10V/range, 0V); update after bench calibration. */
+    printf("# CAL_STATUS: slope=%.6f V/AMU offset=%.6f V\n",
+           (double)MSIF_FMASS_CAL_SLOPE_V_PER_AMU,
+           (double)MSIF_FMASS_CAL_OFFSET_V);
     return false;
-#else
-    const float stored_slope  = MSIF_FMASS_CAL_SLOPE_V_PER_AMU;
-    const float stored_offset = MSIF_FMASS_CAL_OFFSET_V;
-    const float spec_slope    = 10.0f / (float)MSIF_QMS_MASS_RANGE;
-    printf("# CAL_STATUS: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    printf("# CAL_STATUS: NOT_BENCH_VERIFIED -- FMASS calibration is provisional.\n");
-    if (stored_slope != 0.0f) {
-        printf("# CAL_STATUS: using STORED slope=%.6f V/AMU offset=%.6f V "
-               "(MSIF_cfg.h; flag still 0)\n",
-               (double)stored_slope, (double)stored_offset);
-    } else {
-        printf("# CAL_STATUS: using SPEC_DEFAULT slope=%.6f V/AMU "
-               "(10V / MSIF_QMS_MASS_RANGE=%u, per QMS-112 manual 10.2.2.1)\n",
-               (double)spec_slope, (unsigned)MSIF_QMS_MASS_RANGE);
-    }
-    printf("# CAL_STATUS: run Phase H sweep, set slope/offset in MSIF_cfg.h,\n");
-    printf("# CAL_STATUS: then flip MSIF_FMASS_CAL_BENCH_VERIFIED=1.\n");
-    printf("# CAL_STATUS: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    return true;
-#endif
 }
 
-/* Resolve the slope/offset to use for AMU->QDP-volts conversion. Returns
- * false iff the bench-verified flag is set but the stored slope is 0
- * (operator mistake). On true return *slope_out and *offset_out are set. */
+/* Resolve the slope/offset to use for AMU->QDP-volts conversion. Always
+ * succeeds — slope/offset come straight from MSIF_cfg.h. */
 static bool msif_peak_resolve_cal(float *slope_out, float *offset_out) {
-#if MSIF_FMASS_CAL_BENCH_VERIFIED
-    if (MSIF_FMASS_CAL_SLOPE_V_PER_AMU == 0.0f) return false;
     *slope_out  = MSIF_FMASS_CAL_SLOPE_V_PER_AMU;
     *offset_out = MSIF_FMASS_CAL_OFFSET_V;
     return true;
-#else
-    if (MSIF_FMASS_CAL_SLOPE_V_PER_AMU != 0.0f) {
-        *slope_out  = MSIF_FMASS_CAL_SLOPE_V_PER_AMU;
-        *offset_out = MSIF_FMASS_CAL_OFFSET_V;
-    } else {
-        *slope_out  = 10.0f / (float)MSIF_QMS_MASS_RANGE;
-        *offset_out = 0.0f;
-    }
-    return true;
-#endif
 }
 
 /* ------------------------------------------------------------------ */
@@ -158,11 +121,7 @@ msif_peak_status_t msif_peak_sweep_mass(float mass_start_amu,
     msif_peak_print_cal_status();
 
     float slope = 0.0f, offset = 0.0f;
-    if (!msif_peak_resolve_cal(&slope, &offset)) {
-        printf("# PEAK_SWEEP: BENCH_VERIFIED set but slope=0 -- "
-               "refusing to move DAC\n");
-        return MSIF_PEAK_ERR_CAL_ZERO;
-    }
+    (void)msif_peak_resolve_cal(&slope, &offset);
 
     printf("# PEAK_SWEEP mass_start=%.4f mass_end=%.4f steps=%u "
            "samples_per_pt=%u settle_ms=%u slope=%.6f V/AMU offset=%.6f V\n",
