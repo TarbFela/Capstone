@@ -485,7 +485,7 @@ typedef struct mcp_info_t {
 
 
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin);
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin, int mclk_pin);
 
 
 // NOTE: This is currently written for the MCP346xR, **NOT** the MCP356xR which has a 24-bit adc output.
@@ -500,6 +500,8 @@ mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg);
 
 void mcp_get_default_cfg(mcp_cfg_t *cfg);
+
+mcp_status_t mcp_mclk_init(mcp_info_t *s, uint32_t freq);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.

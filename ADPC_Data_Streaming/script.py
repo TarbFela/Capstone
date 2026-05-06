@@ -49,9 +49,9 @@ def decode_sample(word: int):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def send_prompt(port: serial.Serial, prompt: str = 'c'):
-    """Send a single character prompt."""
-    port.write(prompt.encode())
+def send_char(port: serial.Serial, ch: str):
+    """Send a single character (no newline — firmware uses getchar_timeout_us)."""
+    port.write(ch[0].encode())
     port.flush()
 
 def wait_for(port: serial.Serial, marker: str, timeout: float = TIMEOUT) -> str:
@@ -78,8 +78,8 @@ def wait_for(port: serial.Serial, marker: str, timeout: float = TIMEOUT) -> str:
 def read_raw_stream(port: serial.Serial) -> bytes:
     """
     Read raw binary data from the port until "END RAW DATA STREAM" is seen.
-    The firmware interleaves text lines and binary blobs, so we accumulate
-    everything and strip the sentinel line at the end.
+    The firmware mutes stdio_usb during the blast, then restores it, so
+    everything between the markers is pure binary.
     """
     raw = b""
     deadline = time.time() + TIMEOUT
@@ -92,15 +92,23 @@ def read_raw_stream(port: serial.Serial) -> bytes:
             raw += chunk
             deadline = time.time() + TIMEOUT  # reset on activity
             if END_MARKER in raw:
-                # Split off everything before the marker
                 data, _ = raw.split(END_MARKER, 1)
-                # Strip any trailing newline/CR that precede the marker
                 data = data.rstrip(b"\r\n")
                 return data
 
     raise TimeoutError("Timed out waiting for END RAW DATA STREAM")
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+
+HELP = """
+Commands:
+  r        stream ADC data and save log
+  e / d    enable / disable H-bridge
+  0-9      set PWM level (digit × 15 offset)
+  p / l    nudge PWM level +5 / -5
+  [space]  toggle PWM on/off
+  q        reboot device and exit
+"""
 
 def main():
     if len(sys.argv) < 2:
@@ -110,88 +118,100 @@ def main():
     device_path = sys.argv[1]
     print(f"Opening {device_path} at {BAUD} baud...")
 
+    os.makedirs("logs", exist_ok=True)
+
     with serial.Serial(device_path, BAUD, timeout=1) as port:
-        time.sleep(0.5)  # let the port settle
+        time.sleep(0.5)
         port.reset_input_buffer()
 
-        # ── Step 1: initial prompt (firmware waits for any char) ────────────
+        # ── Step 1: initial handshake ────────────────────────────────────────
+        # Firmware: scanf(" %c", ui) → prints "[input recieved]"
         print("\n[1] Sending initial prompt...")
-        send_prompt(port, prompt='c\n')
-        wait_for(port, "input")
-        time.sleep(1)
+        send_char(port, 'c')
+        #wait_for(port, "input recieved")
+        #print("    Firmware ready.")
 
+        # Drain the menu text the firmware prints
+        time.sleep(0.3)
+        port.reset_input_buffer()
 
-        # ── Step 2: second prompt to start sampling ──────────────────────────
-        while(True):
-            while(True):
-                ui = input("Enter the number of buffers you would like (zero to reboot):")
+        # ── Step 2: command loop ─────────────────────────────────────────────
+        print(HELP)
+        while True:
+            ui = input("cmd> ").strip()
+            if not ui:
+                continue
+
+            ch = ui[0]
+
+            if ch == 'q':
+                print("\nSending 'q' → rebooting device...")
+                send_char(port, 'q')
                 try:
-                    ui = int(ui)
-                    break
-                except:
-                    print("Invalid Input.")
-            if ui == 0:
+                    wait_for(port, "REBOOT", timeout=3.0)
+                except TimeoutError:
+                    pass
+                print("Done.")
                 break
-            print("\n[2] Sending start prompt...")
-            send_prompt(port, f"{ui}\n")
-            wait_for(port, "input recieved")
-            print("    Firmware acknowledged.")
 
-            # ── Step 3: capture stream ───────────────────────────────────────────
-            print("\n[3] Waiting for stream start...")
-            wait_for(port, "STREAMING RAW DATA")
-            print("    Stream started.")
+            elif ch == 'r':
+                # ── stream & decode ──────────────────────────────────────────
+                send_char(port, 'r')
+                print("\n[r] Waiting for stream start...")
+                wait_for(port, "STREAMING RAW DATA")
+                print("    Stream started.")
 
-            raw_bytes = read_raw_stream(port)
+                raw_bytes = read_raw_stream(port)
 
-            # ── Step 4: decode ───────────────────────────────────────────────────
-            n_bytes = len(raw_bytes)
-            n_words = n_bytes // BYTES_PER_WORD
-            leftover = n_bytes % BYTES_PER_WORD
+                n_bytes  = len(raw_bytes)
+                n_words  = n_bytes // BYTES_PER_WORD
+                leftover = n_bytes % BYTES_PER_WORD
 
-            print(f"\n[4] Received {n_bytes} bytes ({n_words} samples, {leftover} leftover bytes)")
+                print(f"\n    Received {n_bytes} bytes ({n_words} samples, {leftover} leftover bytes)")
+                if leftover:
+                    print(f"    WARNING: {leftover} bytes not aligned — truncating.")
 
-            if leftover:
-                print(f"    WARNING: {leftover} bytes not aligned to uint32 boundary — truncating.")
+                # RP2350 is little-endian; dma_buff is uint32_t[] written directly
+                samples = struct.unpack_from(f"<{n_words}I", raw_bytes)
 
-            samples = struct.unpack_from(f"<{n_words}I", raw_bytes)
+                data = {}
+                for word in samples:
+                    ch_id, val = decode_sample(word)
+                    if str(ch_id) not in data.keys():
+                        data[str(ch_id)] = []
+                    data[str(ch_id)].append(val)
 
-            print(f"\n{'Index':>6}  {'Raw (hex)':>12}  {'CH':>3}  {'Value':>12}")
-            print("-" * 42)
-            data = {}
-
-            for i, word in enumerate(samples):
-                ch, val = decode_sample(word)
-                if(str(ch) not in data.keys()): data[str(ch)] = []
-                data[str(ch)].append(val)
-                #print(f"{i:>6}  {word:#012x}  {ch:>3}  {val:>12}")
-
-
-            fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
-            with open("logs/" + fname, "x") as f:
-                keys = list(data.keys())
-                for key in keys: f.write(f"CH {key}, ")
-                f.write("\n")
-                for i, _ in enumerate(data[keys[0]]):
+                fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
+                fpath = "logs/" + fname
+                with open(fpath, "x") as f:
+                    keys = list(data.keys())
                     for key in keys:
-                        f.write(f"{data[key][i]}, ")
+                        f.write(f"CH {key}, ")
                     f.write("\n")
+                    for i in range(len(data[keys[0]])):
+                        for key in keys:
+                            f.write(f"{data[key][i]}, ")
+                        f.write("\n")
 
+                print(f"    Saved → {fpath}")
+                for k, v in data.items():
+                    print(f"    Channel {k}: {len(v)} samples")
 
-        # ── Step 5: send 'q' to exit ─────────────────────────────────────────
-        time.sleep(0.5)
-        print("\n[5] Sending 'q' to reboot device...")
-        # wait for the firmware's "Done." prompt first
-        try:
-            wait_for(port, "Done.", timeout=5.0)
-        except TimeoutError:
-            pass  # firmware may have already moved on
-        send_prompt(port, 'q\n')
-        try:
-            wait_for(port, "REBOOT", timeout=3.0)
-        except TimeoutError:
-            pass
-        print("    Done.")
+                # Drain any trailing firmware text (batch count line etc.)
+                time.sleep(0.3)
+                port.reset_input_buffer()
+
+            elif ch in ('e', 'd', 'p', 'l', ' ') or ch.isdigit():
+                send_char(port, ch)
+                time.sleep(0.1)
+                # Echo whatever the firmware sends back
+                resp = port.read(port.in_waiting)
+                for line in resp.decode(errors="replace").splitlines():
+                    if line.strip():
+                        print(f"  [fw] {line.strip()}")
+
+            else:
+                print(f"  Unknown command '{ch}'. {HELP}")
 
 
 if __name__ == "__main__":

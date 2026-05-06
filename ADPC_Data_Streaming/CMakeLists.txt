@@ -21,6 +21,7 @@ add_executable(adpc_streaming
 		ada4255_driver/ada4255.c
 		mcp3x6xR_driver/mcp3x6xR.c
 		mcp3x6xR_driver/mcp_pio.c
+
 )
 
 pico_generate_pio_header(adpc_streaming ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp_pio.pio)
@@ -40,6 +41,7 @@ target_link_libraries(adpc_streaming
 		hardware_gpio
 		hardware_pwm
 		hardware_flash
+		hardware_clocks
 		pico_bootrom
 )
 

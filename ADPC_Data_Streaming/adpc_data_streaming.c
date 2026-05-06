@@ -143,6 +143,7 @@ int main() {
             dma_done = 0;
             int pii = 0;
             uint bsent = 0;
+            cc = 5;
             int dma_last_printed = dma_last_written;
             printf("STREAMING RAW DATA:\n");
             sleep_ms(100);

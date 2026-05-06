@@ -6,6 +6,7 @@
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
+#include "hardware/clocks.h"
 
 #include <stdio.h>
 
@@ -14,7 +15,7 @@
 #define MCP_CS_DESELECT 1
 #define MCP_CS_SELECT 0
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin) {
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin, int mclk_pin) {
     gpio_init(cs_pin);
     gpio_put(cs_pin, MCP_CS_DESELECT);
     gpio_set_dir(cs_pin, GPIO_OUT);
@@ -31,34 +32,33 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     s->mosi = mosi_pin;
     s->sck = sck_pin;
     s->nirq = nirq_pin;
+    s->mclk = mclk_pin;
     s->spi = spi;
 
     return 0;
 }
 
-// pass a frequency of 0 to use the internal oscillator.
+// pass a frequency of 0 to do nothing.
+// Note: Ensure that the configuration of the ADC includes the EXTERNAL clock bit.
 // Does not do bounds checking on arguments. Hazardous!
-mcp_status_t mcp_mclk_init(mcp_info_t *s, uint mclk_pin, uint32_t freq) {
-    s->mclk = mclk_pin;
-    s->mclk_chan = pwm_gpio_to_channel(s->mclk);
-    s->mclk_slice = pwm_gpio_to_slice_num(s->mclk);
+mcp_status_t mcp_mclk_init(mcp_info_t *s, uint32_t freq) {
+    if(freq == 0) return 0;
     gpio_init(s->mclk);
     gpio_set_dir(s->mclk, GPIO_OUT);
     gpio_set_slew_rate(s->mclk,GPIO_SLEW_RATE_FAST);
     gpio_set_function(s->mclk,GPIO_FUNC_PWM);
+    uint mclk_chan = pwm_gpio_to_channel(s->mclk);
+    uint mclk_slice = pwm_gpio_to_slice_num(s->mclk);
     pwm_config pwmc = pwm_get_default_config();
     // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
-    pwm_config_set_clkdiv(&pwmc, 6.25f);
-    pwm_init(s->mclk_slice,&pwmc,false);
+    float clkdiv = (float)SYS_CLK_HZ / (float)(2*freq);
+    pwm_config_set_clkdiv(&pwmc, clkdiv);
     pwm_config_set_wrap(&pwmc, 2);
-    pwm_set_chan_level(s->mclk_slice,s->mclk_chan,1);
-    pwm_set_enabled(s->mclk_slice, true);
+    pwm_init(mclk_slice,&pwmc,true);
+    pwm_set_chan_level(mclk_slice,mclk_chan,1);
 
-    uint8_t cfg0 = s->cfg.cfgs[0];
-    cfg0 &= ~MCP_CFG0_CLK_SEL_BITS;
-    cfg0 |= MCP_CFG0_CLK_SEL_EXTERNAL;
-    mcp_status_t status = mcp_write_regs(s,&cfg0,1,MCP_REG_ADDR_CONFIG0);
-    if(status) return status;
+    s->cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
+    mcp_configure(s, &(s->cfg));
 
     return 0;
 }

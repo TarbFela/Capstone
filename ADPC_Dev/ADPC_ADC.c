@@ -23,7 +23,7 @@ enum adpc_adc_status_code {GOOD = 0, NO_POWER = -1, CONFIG_FAILED = -2};
 int adpc_adc_init(void (*dma_handler)(void)) {
     gpio_disable_pulls(ADC_1_PIN_IRQ);
     gpio_init(ADC_1_PIN_IRQ);
-    mcp_spi_init(&mcp_1, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK,ADC_1_PIN_IRQ);
+    mcp_spi_init(&mcp_1, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK,ADC_1_PIN_IRQ, ADC_MCLK_PIN);
 
     mcp_pio_init(&mpio_1, &mcp_1, dma_buff, dma_handler);
 
@@ -37,9 +37,10 @@ int adpc_adc_init(void (*dma_handler)(void)) {
     cfg.scan_sel = MCP_SCAN_SEL_BIT_DIFF_A | MCP_SCAN_SEL_BIT_DIFF_B;
     mcp_configure(&mcp_1, &cfg);
 
-
-    cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
-    mcp_configure(&mcp_1, &cfg);
+    mcp_mclk_init(&mcp_1, 10000000);
+//
+//    cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
+//    mcp_configure(&mcp_1, &cfg);
 
     mcp_timer_set(&mcp_1,0);
     mcp_scan_set_dly(&mcp_1,0);
