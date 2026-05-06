@@ -79,6 +79,9 @@ mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg) {
     s->cfg.cfgs[1] = cfg->cfgs[1];
     s->cfg.cfgs[2] = cfg->cfgs[2];
     s->cfg.cfgs[3] = cfg->cfgs[3];
+    s->cfg.input_mode = cfg->input_mode;
+    s->cfg.mux_sel = cfg->mux_sel;
+    s->cfg.scan_sel = cfg->scan_sel;
 
     uint8_t tx[16], rx[16];
     for(int i =0; i<16; i++) {
