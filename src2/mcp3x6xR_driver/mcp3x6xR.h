@@ -290,9 +290,10 @@ bit 5-4 CLK_SEL[1:0]: Clock Selection
 01 = External digital clock
 00 = External digital clock (default)
 */
-#define MCP_CFG0_CLK_SEL_INTERNAL_AMCLKOUT  0x3<<4
-#define MCP_CFG0_CLK_SEL_INTERNAL           0x2<<4
-#define MCP_CFG0_CLK_SEL_EXTERNAL           0x0
+#define MCP_CFG0_CLK_SEL_BITS               (0x3U<<4)
+#define MCP_CFG0_CLK_SEL_INTERNAL_AMCLKOUT  (0x3U<<4)
+#define MCP_CFG0_CLK_SEL_INTERNAL           (0x2U<<4)
+#define MCP_CFG0_CLK_SEL_EXTERNAL           (0x0)
 
 /*
 bit 3-2 CS_SEL[1:0]: Current Source/Sink Selection Bits for Sensor Bias (source on VIN+/Sink on VIN-)
@@ -474,6 +475,9 @@ typedef struct mcp_info_t {
     int mosi;
     int sck;
     int nirq;
+    uint mclk;
+    uint mclk_slice;
+    uint mclk_chan;
     mcp_cfg_t cfg;
 } mcp_info_t;
 

@@ -38,4 +38,7 @@ void mphb_gpio_init(mphb2_gpio_pwm_t *s, int pwm_ab_pin, int pwm_cd_pin, int ph_
 
 }
 
-#endif
+void mphb_set_levels(mphb2_gpio_pwm_t *s, int level_A, int level_C) {
+    pwm_set_chan_level(s->slice,s->ch_A,level_A);
+    pwm_set_chan_level(s->slice,s->ch_C,level_C);
+}

@@ -16,11 +16,11 @@ pico_sdk_init()
 # rest of your project
 add_executable(adpc_streaming
 		adpc_data_streaming.c
-	../src2/capstone_w25.c
+		../ADPC_Dev/ADPC_ADC.c
+		../ADPC_Dev/adpc_gpio_pwm.c
+		ada4255_driver/ada4255.c
 		mcp3x6xR_driver/mcp3x6xR.c
 		mcp3x6xR_driver/mcp_pio.c
-		ada4255_driver/ada4255.c
-		../ADPC_Dev/ADPC_ADC.c
 )
 
 pico_generate_pio_header(adpc_streaming ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp_pio.pio)

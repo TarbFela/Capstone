@@ -2,7 +2,7 @@
 #define ADPC_GPIO_PWM_H
 
 #include "pico/stdlib.h"
-#include "hardware/gpio.h
+#include "hardware/gpio.h"
 #include "hardware/pwm.h"
 
 typedef struct {
@@ -16,5 +16,7 @@ typedef struct {
 
 // initialize gpio pins, pwm channels, and populate the info struct.
 void mphb_gpio_init(mphb2_gpio_pwm_t *s, int pwm_ab_pin, int pwm_cd_pin, int ph_en_pin);
+
+void mphb_set_levels(mphb2_gpio_pwm_t *s, int level_A, int level_C);
 
 #endif

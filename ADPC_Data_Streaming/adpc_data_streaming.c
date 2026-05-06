@@ -16,8 +16,8 @@
 #include "ada4255_driver/ada4255.h"
 
 #include "../ADPC_Dev/ADPC_cfg.h"
-
 #include "../ADPC_Dev/ADPC_ADC.h"
+#include "../ADPC_Dev/adpc_gpio_pwm.h"
 
 #include "tusb.h"
 
@@ -80,57 +80,96 @@ int main() {
         printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
     }
 
+    printf("Initializing MPHB connection(s)\n");
+    mphb2_gpio_pwm_t hb_1B;
+    mphb_gpio_init(&hb_1B, PWM_B_1_PIN, PWM_D_1_PIN, PH_EN_B1_PIN);
+
+
     printf("initialized!\n");
 
 
 
-sample:
-    printf("To reboot enter 'q'. To read samples, enter a number.\n");
-    scanf(" %s",ui);
-    printf("[input recieved]\n");
-    if (ui[0] == 'q') goto reboot;
-    cc = atoi(ui);
-    if (cc == 0) {
-        printf("Invalid input.\n");
-        goto sample;
-    }
-    sleep_ms(100);
-    if(ui[0] == 'q') goto reboot;
 
-    dma_done = 0;
-    int pii = 0;
-    uint bsent = 0;
-    int dma_last_printed = dma_last_written;
-    printf("STREAMING RAW DATA:\n");
-    sleep_ms(100);
-    // Mute stdio over USB
-    stdio_set_driver_enabled(&stdio_usb, false);
-    if(adpc_adc_start() != 0) {
-        printf("ADPC START ERROR!\n");
-        goto reboot;
+    printf("To reboot enter 'q'.\n"
+           "To read samples, enter 'r'.\n"
+           "To control PWM, enter 0-9 or 'p' or 'l'\n"
+           "To enable/disable PWM, enter 'e' or 'd' (resp.)\n");
+
+    int level = 0;
+    int pwm_enabled = 0;
+    while(1) {
+        ui[0] = getchar_timeout_us(1000);
+        if((int8_t)*ui == PICO_ERROR_TIMEOUT) {
+            continue;
+        }
+        else {
+            printf("RECIEVED [%c]\n",*ui);
+        }
+        if(*ui == 'q') {
+            mphb_set_levels(&hb_1B,0,0);
+            goto reboot;
+        }
+        if(*ui == ' ') {
+            pwm_enabled = !pwm_enabled;
+            printf("Setting PWM state to %s\n",pwm_enabled ? "ENABLED" : "DISABLED");
+            if (!pwm_enabled) {
+                mphb_set_levels(&hb_1B,0,0);
+            }
+            else {
+                mphb_set_levels(&hb_1B,300,300);
+            }
+            sleep_us(100); // let the PWM go to zero and then disable it.
+            pwm_set_enabled(hb_1B.slice, pwm_enabled);
+        }
+        if(*ui == 'e') {
+            gpio_put(PH_EN_B1_PIN, 1);
+            printf("ENABLE PIN ON\n");
+        }
+        if(*ui == 'd') {
+            gpio_put(PH_EN_B1_PIN, 0);
+            printf("ENABLE PIN OFF\n");
+        }
+        else if ((*ui >= '0') && (*ui <= '9')) {
+            level = (*ui-'0')*15;
+            printf("%d offset\n",level);
+            mphb_set_levels(&hb_1B,300+level,300-level);
+        }
+        else if (*ui == 'p' || *ui == 'l') {
+            level += (*ui == 'p') ? 5 : -5;
+            printf("%d offset\n",level);
+            mphb_set_levels(&hb_1B,300+level,300-level);
+        }
+        else if (*ui == 'r') {
+            dma_done = 0;
+            int pii = 0;
+            uint bsent = 0;
+            int dma_last_printed = dma_last_written;
+            printf("STREAMING RAW DATA:\n");
+            sleep_ms(100);
+            // Mute stdio over USB
+            stdio_set_driver_enabled(&stdio_usb, false);
+            if(adpc_adc_start() != 0) {
+                printf("ADPC START ERROR!\n");
+                goto reboot;
+            }
+            while(!dma_done) {
+                while(dma_last_written == dma_last_printed) tight_loop_contents();
+                // Blast raw data
+                bsent += tud_cdc_write(dma_buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
+                tud_cdc_write_flush();
+                while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+                //tud_task();
+                dma_last_printed = dma_last_written;
+                pii ++;
+            }
+            // Restore stdio
+            stdio_set_driver_enabled(&stdio_usb, true);
+            printf("\nEND RAW DATA STREAM\n");
+            printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
+        }
     }
-    while(!dma_done) {
-        while(dma_last_written == dma_last_printed) tight_loop_contents();
-        // Blast raw data
-        bsent += tud_cdc_write(dma_buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
-        tud_cdc_write_flush();
-        while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
-        //tud_task();
-        dma_last_printed = dma_last_written;
-        pii ++;
-    }
-    // Restore stdio
-    stdio_set_driver_enabled(&stdio_usb, true);
-    printf("\nEND RAW DATA STREAM\n");
-    printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
-//    printf("Samples:\n");
-//    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-//        printf("[%01ld]",dma_buff[i]>>29);
-//        sign_extend_24_to_32(dma_buff[i]);
-//        printf(" %-10ld  ",dma_buff[i]);
-//        if((i%8)==7) printf("\n",i);
-//    }
-    goto sample;
+
+
 
 
 

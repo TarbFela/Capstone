@@ -21,6 +21,7 @@ add_executable(adpc
 		ADPC_ADC.c
 		adpc_dsp.c
 		adpc_core1.c
+		adpc_gpio_pwm.c
 )
 
 pico_generate_pio_header(adpc ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp_pio.pio)

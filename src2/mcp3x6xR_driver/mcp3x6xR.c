@@ -5,6 +5,7 @@
 
 #include "hardware/spi.h"
 #include "hardware/gpio.h"
+#include "hardware/pwm.h"
 
 #include <stdio.h>
 
@@ -31,6 +32,33 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
     s->sck = sck_pin;
     s->nirq = nirq_pin;
     s->spi = spi;
+
+    return 0;
+}
+
+// pass a frequency of 0 to use the internal oscillator.
+// Does not do bounds checking on arguments. Hazardous!
+mcp_status_t mcp_mclk_init(mcp_info_t *s, uint mclk_pin, uint32_t freq) {
+    s->mclk = mclk_pin;
+    s->mclk_chan = pwm_gpio_to_channel(s->mclk);
+    s->mclk_slice = pwm_gpio_to_slice_num(s->mclk);
+    gpio_init(s->mclk);
+    gpio_set_dir(s->mclk, GPIO_OUT);
+    gpio_set_slew_rate(s->mclk,GPIO_SLEW_RATE_FAST);
+    gpio_set_function(s->mclk,GPIO_FUNC_PWM);
+    pwm_config pwmc = pwm_get_default_config();
+    // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
+    pwm_config_set_clkdiv(&pwmc, 6.25f);
+    pwm_init(s->mclk_slice,&pwmc,false);
+    pwm_config_set_wrap(&pwmc, 2);
+    pwm_set_chan_level(s->mclk_slice,s->mclk_chan,1);
+    pwm_set_enabled(s->mclk_slice, true);
+
+    uint8_t cfg0 = s->cfg.cfgs[0];
+    cfg0 &= ~MCP_CFG0_CLK_SEL_BITS;
+    cfg0 |= MCP_CFG0_CLK_SEL_EXTERNAL;
+    mcp_status_t status = mcp_write_regs(s,&cfg0,1,MCP_REG_ADDR_CONFIG0);
+    if(status) return status;
 
     return 0;
 }
