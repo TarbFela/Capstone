@@ -22,7 +22,7 @@
 #include "tusb.h"
 
 
-volatile int dma_done = 0;
+volatile int dma0_done = 0;
 // if none, 0, if A, 1, if B, 2
 volatile int dma_last_written = 0;
 
@@ -42,7 +42,7 @@ void dma_irq_handler_1(void) {
     if(cc == 0) {
         mcp_pio_stop(&mpio_1);
         //printf("DONE!\n");
-        dma_done = 1;
+        dma0_done = 1;
         cc = 0;
     }
     else {

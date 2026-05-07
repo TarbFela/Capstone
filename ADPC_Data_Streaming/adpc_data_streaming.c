@@ -22,32 +22,21 @@
 #include "tusb.h"
 
 
-volatile int dma_done = 0;
 // if none, 0, if A, 1, if B, 2
-volatile int dma_last_written = 0;
+volatile int dma0_last_written = 0;
 
-volatile int cc = 1;
+volatile int cc0 = 1;
 
 void dma_irq_handler_1(void) {
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints1 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
         dma_hw->ints1 = 0x1 << (mpio_1.dma_a);
-        dma_last_written = 1;
+        dma0_last_written = 1;
     }
     else {
         dma_hw->ints1 = 0x1 << (mpio_1.dma_b);
-        dma_last_written = 2;
-    }
-    if(cc == 0) {
-        mcp_pio_stop(&mpio_1);
-        //printf("DONE!\n");
-        dma_done = 1;
-        cc = 0;
-    }
-    else {
-        //printf("%d...",cc);
-        cc--;
+        dma0_last_written = 2;
     }
 }
 
@@ -56,21 +45,11 @@ void dma_irq_handler_0(void) {
     int culprit_is_a = dma_hw->ints0 & (1u << mpio_0.dma_a);
     if (culprit_is_a) {
         dma_hw->ints0 = 0x1 << (mpio_0.dma_a);
-        dma_last_written = 1;
+        dma0_last_written = 1;
     }
     else {
         dma_hw->ints0 = 0x1 << (mpio_0.dma_b);
-        dma_last_written = 2;
-    }
-    if(cc == 0) {
-        mcp_pio_stop(&mpio_0);
-        //printf("DONE!\n");
-        dma_done = 1;
-        cc = 0;
-    }
-    else {
-        //printf("%d...",cc);
-        cc--;
+        dma0_last_written = 2;
     }
 }
 
@@ -164,11 +143,10 @@ int main() {
 //            mpio_r = (*ui=='r') ? &mpio_0: &mpio_1;
 //            printf("using %s\n",mpio_r == &mpio_1 ? "ADC 1" : "ADC 0");
 
-            dma_done = 0;
             int pii = 0;
             uint bsent = 0;
-            cc = 5;
-            int dma_last_printed = dma_last_written;
+            cc0 = 5;
+            int dma0_last_printed = dma0_last_written;
             printf("STREAMING RAW DATA:\n");
             sleep_ms(100);
             // Mute stdio over USB
@@ -177,27 +155,28 @@ int main() {
                 printf("ADPC START ERROR!\n");
                 goto reboot;
             }
-            while(!dma_done) {
-                while(dma_last_written == dma_last_printed) {
+            int ui_exit_signal = 0;
+            while(1) {
+                while(dma0_last_written == dma0_last_printed) {
                     if( tud_cdc_available() ) {
                         mcp_pio_stop(&mpio_0);
-                        dma_done = 2;
+                        ui_exit_signal = 1;
                         break;
                     }
                 };
-                if(dma_done == 2) break;
+                if(ui_exit_signal) break;
                 // Blast raw data
-                bsent += tud_cdc_write(mpio_0.buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
+                bsent += tud_cdc_write(mpio_0.buff + (dma0_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
                 tud_cdc_write_flush();
                 while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
                 //tud_task();
-                dma_last_printed = dma_last_written;
+                dma0_last_printed = dma0_last_written;
                 pii ++;
             }
             // Restore stdio
             stdio_set_driver_enabled(&stdio_usb, true);
             printf("\nEND RAW DATA STREAM\n");
-            if(dma_done ==2) printf("Interrupted by user input.\n");
+            if(ui_exit_signal) printf("Interrupted by user input.\n");
             printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
         }
     }
