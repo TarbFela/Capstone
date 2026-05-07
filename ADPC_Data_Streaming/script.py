@@ -166,13 +166,14 @@ def main():
                 print("Done.")
                 break
 
-            elif ch == 'r' or ch == 'R':
+            elif ch is 'r' and ui[1:].isnumeric():
+
+                STREAM_DURATION = int(ui[1:])
                 # ── stream & decode ──────────────────────────────────────────
-                send_char(port, ch)
+                send_char(port, 'r')
                 print("\n[r] Waiting for stream start...")
                 wait_for(port, "STREAMING RAW DATA")
                 print("    Stream started.")
-                STREAM_DURATION = 5
                 print(f"    Stream started. Collecting for {STREAM_DURATION}s...")
 
                 time.sleep(STREAM_DURATION)
