@@ -154,9 +154,9 @@ def main():
                 print("Done.")
                 break
 
-            elif ch == 'r':
+            elif ch == 'r' or ch == 'R':
                 # ── stream & decode ──────────────────────────────────────────
-                send_char(port, 'r')
+                send_char(port, ch)
                 print("\n[r] Waiting for stream start...")
                 wait_for(port, "STREAMING RAW DATA")
                 print("    Stream started.")

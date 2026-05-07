@@ -66,12 +66,13 @@ int adpc_adc_init(void (*dma_handler_1)(void), void (*dma_handler_0)(void)) {
 }
 
 // TODO: check communication somehow.
+// Starts an ADC, PIO, and DMA
 int adpc_adc_start(mcp_pio_t *s) {
     // write ADC mode
     uint8_t tx[5], rx[5];
     tx[0] = s->mcp_info->cfg.cfgs[0] | MCP_CFG0_ADC_MODE_CONV;
-    mcp_write_regs(s->mcp_info, tx, 1, MCP_REG_ADDR_CONFIG0);
-
+    mcp_status_t status = mcp_write_regs(s->mcp_info, tx, 1, MCP_REG_ADDR_CONFIG0);
+    if( status == 0x00 ) return MCP_STATUS_NO_CONNECTION;
     // prepare to perform static read of ADC register
     tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
     // wait for first IRQ pin signal
@@ -82,4 +83,21 @@ int adpc_adc_start(mcp_pio_t *s) {
 
     mcp_pio_start(s);
     return GOOD;
+}
+
+// **just** starts the ADC running and ready for continuous reads; allows PIOs and DMAs to be started later. Might be risky?
+int adpc_adc_start_pending(mcp_pio_t *s) {
+    // write ADC mode
+    uint8_t tx[5], rx[5];
+    tx[0] = s->mcp_info->cfg.cfgs[0] | MCP_CFG0_ADC_MODE_CONV;
+    mcp_status_t status = mcp_write_regs(s->mcp_info, tx, 1, MCP_REG_ADDR_CONFIG0);
+    if( status == 0x00 ) return MCP_STATUS_NO_CONNECTION;
+
+    // prepare to perform static read of ADC register
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
+    // wait for first IRQ pin signal
+    while(gpio_get(s->mcp_info->nirq));
+
+    gpio_put(s->mcp_info->cs,0); sleep_us(5);
+    spi_write_read_blocking(s->mcp_info->spi, tx, rx, 5);
 }

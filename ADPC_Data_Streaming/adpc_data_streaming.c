@@ -161,8 +161,8 @@ int main() {
             mphb_set_levels(&hb_1B,300+level,300-level);
         }
         else if (*ui == 'r' || *ui == 'R') {
-            mpio_r = (*ui=='r') ? &mpio_0: &mpio_1;
-            printf("using %s\n",mpio_r == &mpio_1 ? "ADC 1" : "ADC 0");
+//            mpio_r = (*ui=='r') ? &mpio_0: &mpio_1;
+//            printf("using %s\n",mpio_r == &mpio_1 ? "ADC 1" : "ADC 0");
 
             dma_done = 0;
             int pii = 0;
@@ -173,14 +173,21 @@ int main() {
             sleep_ms(100);
             // Mute stdio over USB
             stdio_set_driver_enabled(&stdio_usb, false);
-            if(adpc_adc_start(mpio_r) != 0) {
+            if(adpc_adc_start(&mpio_0) != 0) {
                 printf("ADPC START ERROR!\n");
                 goto reboot;
             }
             while(!dma_done) {
-                while(dma_last_written == dma_last_printed) tight_loop_contents();
+                while(dma_last_written == dma_last_printed) {
+                    if( tud_cdc_available() ) {
+                        mcp_pio_stop(&mpio_0);
+                        dma_done = 2;
+                        break;
+                    }
+                };
+                if(dma_done == 2) break;
                 // Blast raw data
-                bsent += tud_cdc_write(mpio_r->buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
+                bsent += tud_cdc_write(mpio_0.buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
                 tud_cdc_write_flush();
                 while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
                 //tud_task();
@@ -190,6 +197,7 @@ int main() {
             // Restore stdio
             stdio_set_driver_enabled(&stdio_usb, true);
             printf("\nEND RAW DATA STREAM\n");
+            if(dma_done ==2) printf("Interrupted by user input.\n");
             printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
         }
     }

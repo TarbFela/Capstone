@@ -12,5 +12,6 @@ extern mcp_pio_t mpio_0;
 
 int adpc_adc_init(void (*dma_handler_1)(void), void (*dma_handler_0)(void));
 int adpc_adc_start(mcp_pio_t *s);
+int adpc_adc_start_pending(mcp_pio_t *s);
 
 #endif

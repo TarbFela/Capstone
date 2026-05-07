@@ -17,6 +17,7 @@ pico_sdk_init()
 add_executable(adpc_streaming
 		adpc_data_streaming.c
 		../ADPC_Dev/ADPC_ADC.c
+		../ADPC_Dev/adpc_vsns.c
 		../ADPC_Dev/adpc_gpio_pwm.c
 		ada4255_driver/ada4255.c
 		mcp3x6xR_driver/mcp3x6xR.c
