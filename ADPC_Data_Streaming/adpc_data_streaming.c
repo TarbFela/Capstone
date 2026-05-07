@@ -24,19 +24,18 @@
 
 // if none, 0, if A, 1, if B, 2
 volatile int dma0_last_written = 0;
-
-volatile int cc0 = 1;
+volatile int dma1_last_written = 0;
 
 void dma_irq_handler_1(void) {
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints1 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
         dma_hw->ints1 = 0x1 << (mpio_1.dma_a);
-        dma0_last_written = 1;
+        dma1_last_written = 1;
     }
     else {
         dma_hw->ints1 = 0x1 << (mpio_1.dma_b);
-        dma0_last_written = 2;
+        dma1_last_written = 2;
     }
 }
 
@@ -140,37 +139,50 @@ int main() {
             mphb_set_levels(&hb_1B,300+level,300-level);
         }
         else if (*ui == 'r' || *ui == 'R') {
-//            mpio_r = (*ui=='r') ? &mpio_0: &mpio_1;
-//            printf("using %s\n",mpio_r == &mpio_1 ? "ADC 1" : "ADC 0");
-
             int pii = 0;
             uint bsent = 0;
-            cc0 = 5;
+
             int dma0_last_printed = dma0_last_written;
+            int dma1_last_printed = dma1_last_written;
             printf("STREAMING RAW DATA:\n");
             sleep_ms(100);
             // Mute stdio over USB
-            stdio_set_driver_enabled(&stdio_usb, false);
             if(adpc_adc_start(&mpio_0) != 0) {
                 printf("ADPC START ERROR!\n");
                 goto reboot;
             }
+            if(adpc_adc_start(&mpio_1) != 0) {
+                printf("ADPC START ERROR!\n");
+                goto reboot;
+            }
+            stdio_set_driver_enabled(&stdio_usb, false);
             int ui_exit_signal = 0;
             while(1) {
-                while(dma0_last_written == dma0_last_printed) {
+                while(dma0_last_written == dma0_last_printed && dma1_last_written == dma1_last_printed) {
                     if( tud_cdc_available() ) {
                         mcp_pio_stop(&mpio_0);
+                        mcp_pio_stop(&mpio_1);
                         ui_exit_signal = 1;
                         break;
                     }
                 };
                 if(ui_exit_signal) break;
-                // Blast raw data
-                bsent += tud_cdc_write(mpio_0.buff + (dma0_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
-                tud_cdc_write_flush();
-                while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
-                //tud_task();
-                dma0_last_printed = dma0_last_written;
+                if(dma0_last_written != dma0_last_printed) {
+                    // Blast raw data
+                    bsent += tud_cdc_write(mpio_0.buff + (dma0_last_written - 1) * DMA_BUFF_SIZE,
+                                           DMA_BUFF_SIZE * sizeof(uint32_t));
+                    tud_cdc_write_flush();
+                    while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+                    dma0_last_printed = dma0_last_written;
+                }
+                if(dma1_last_written != dma1_last_printed) {
+                    // Blast raw data
+                    bsent += tud_cdc_write(mpio_1.buff + (dma1_last_written - 1) * DMA_BUFF_SIZE,
+                                           DMA_BUFF_SIZE * sizeof(uint32_t));
+                    tud_cdc_write_flush();
+                    while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+                    dma1_last_printed = dma1_last_written;
+                }
                 pii ++;
             }
             // Restore stdio
