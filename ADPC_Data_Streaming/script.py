@@ -112,10 +112,22 @@ Commands:
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} /dev/cu.usbmodem<XXXX>")
-        sys.exit(1)
-
-    device_path = sys.argv[1]
+        try:
+            devs = os.listdir("/dev/")
+            sel = 0
+            for dev in devs:
+                if "cu.usbmodem" in dev:
+                    if sel != 0:
+                        print("Multiple usbmodems found. Please specify!")
+                        sys.exit(2)
+                    sel = dev
+            if sel != 0:
+                device_path = "/dev/" + sel
+        except:
+            print(f"Usage: {sys.argv[0]} /dev/cu.usbmodem<XXXX>")
+            sys.exit(1)
+    else:
+        device_path = sys.argv[1]
     print(f"Opening {device_path} at {BAUD} baud...")
 
     os.makedirs("logs", exist_ok=True)
@@ -160,6 +172,11 @@ def main():
                 print("\n[r] Waiting for stream start...")
                 wait_for(port, "STREAMING RAW DATA")
                 print("    Stream started.")
+                STREAM_DURATION = 5
+                print(f"    Stream started. Collecting for {STREAM_DURATION}s...")
+
+                time.sleep(STREAM_DURATION)
+                send_char(port, 'c')  # stop the stream
 
                 raw_bytes = read_raw_stream(port)
 
