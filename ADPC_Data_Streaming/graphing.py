@@ -33,7 +33,13 @@ with open(path) as f:
 
 
 fig,ax = plt.subplots(2,1,sharex=True)
+ax[0].ticklabel_format(style='plain', axis='both')
+ax[1].ticklabel_format(style='plain', axis='both')
 ax[0].plot(data[hdr[0]])
 ax[1].plot(data[hdr[1]])
+#ax[0].set_ylim(0,2**24)
+#ax[1].set_ylim(0,2**24)
+ax[0].set_title(hdr[0])
+ax[1].set_title(hdr[1])
 plt.show()
 

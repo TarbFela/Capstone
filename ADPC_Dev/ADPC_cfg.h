@@ -12,8 +12,8 @@
 #define ADC_0_PIN_MISO      0
 #define ADC_0_PIN_CS        5
 #define ADC_0_PIN_SCK       6
-#define ADC_0_SPI           spi0
 #define ADC_0_PIN_IRQ       2
+#define ADC_0_SPI           spi0
 
 // 24-bit MCP3562R ADC: performs TSNS and VSNS functionalitites
 #define ADC_1_PIN_MOSI      11
@@ -41,6 +41,12 @@
 #define TMP_SNS_PIN_SDA 10
 #define TMP_SNS_PIN_SCL 15
 #define TMP_SNS_I2C i2c1
+
+// TS3A24159 Analog Switch for VSNS LT1997 Amplifier Gain Selection
+#define VSNS_AMP_GAIN_SEL_PIN   16
+//todo: move the following defs to a more appropriate file?
+#define VSNS_AMP_GAIN_SEL_0V196 0
+#define VSNS_AMP_GAIN_SEL_0V476 1
 
 // MPHB-002 Signals
 // Headers labelled as follows (a carry-over from MPHB-001 which had four bucks per board (ABCD) as opposed to two

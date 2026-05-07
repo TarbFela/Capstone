@@ -42,21 +42,24 @@ mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso
 // Note: Ensure that the configuration of the ADC includes the EXTERNAL clock bit.
 // Does not do bounds checking on arguments. Hazardous!
 mcp_status_t mcp_mclk_init(mcp_info_t *s, uint32_t freq) {
-    if(freq == 0) return 0;
-    gpio_init(s->mclk);
-    gpio_set_dir(s->mclk, GPIO_OUT);
-    gpio_set_slew_rate(s->mclk,GPIO_SLEW_RATE_FAST);
-    gpio_set_function(s->mclk,GPIO_FUNC_PWM);
-    uint mclk_chan = pwm_gpio_to_channel(s->mclk);
-    uint mclk_slice = pwm_gpio_to_slice_num(s->mclk);
-    pwm_config pwmc = pwm_get_default_config();
-    // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
-    float clkdiv = (float)SYS_CLK_HZ / (float)(2*freq);
-    pwm_config_set_clkdiv(&pwmc, clkdiv);
-    pwm_config_set_wrap(&pwmc, 2);
-    pwm_init(mclk_slice,&pwmc,true);
-    pwm_set_chan_level(mclk_slice,mclk_chan,1);
-
+    static int clk_pin_initialized = 0;
+    if (freq == 0) return 0;
+    if (clk_pin_initialized == 0) {
+        gpio_init(s->mclk);
+        gpio_set_dir(s->mclk, GPIO_OUT);
+        gpio_set_slew_rate(s->mclk, GPIO_SLEW_RATE_FAST);
+        gpio_set_function(s->mclk, GPIO_FUNC_PWM);
+        uint mclk_chan = pwm_gpio_to_channel(s->mclk);
+        uint mclk_slice = pwm_gpio_to_slice_num(s->mclk);
+        pwm_config pwmc = pwm_get_default_config();
+        // 125MHz --> 10Mhz | 125M / 6.25 = 20MHz | Top = 2; Level = 1
+        float clkdiv = (float) SYS_CLK_HZ / (float) (2 * freq);
+        pwm_config_set_clkdiv(&pwmc, clkdiv);
+        pwm_config_set_wrap(&pwmc, 2);
+        pwm_init(mclk_slice, &pwmc, true);
+        pwm_set_chan_level(mclk_slice, mclk_chan, 1);
+        clk_pin_initialized = 1;
+    }
     s->cfg.cfgs[0] = MCP_CFG0_VREF_SEL_INTERNAL | MCP_CFG0_NO_PARTIAL_SHUTDOWN | MCP_CFG0_CLK_SEL_EXTERNAL | MCP_CFG0_ADC_MODE_STDBY;
     mcp_configure(s, &(s->cfg));
 
@@ -222,8 +225,8 @@ int mcp_write_reg_masked_verify(mcp_info_t *s, uint8_t mask, uint32_t val, int r
 
 mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst) {
     // initiate conversion.
-    uint8_t tx[3] = {MCP_CMD_DEV_ADDR | MCP_CMD_ADC_CONV_START_FAST, 0x0, 0x0};
-    uint8_t rx[3] = {0xFF,0xFF,0xFF};
+    uint8_t tx[5] = {MCP_CMD_DEV_ADDR | MCP_CMD_ADC_CONV_START_FAST, 0x0, 0x0,0x0,0x0};
+    uint8_t rx[5] = {0xFF,0xFF,0xFF, 0xFF,0xFF};
 
     gpio_put(s->cs,MCP_CS_SELECT);
     sleep_us(MCP_SLEEPTIME_US);
@@ -244,22 +247,24 @@ mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst) {
         sleep_us(MCP_SLEEPTIME_US);
         gpio_put(s->cs, MCP_CS_DESELECT);
     } while(rx[0]&MCP_STAT_nDR_STATUS_MASK);
+    //sleep_ms(10);
 
 
     // read out data
     rx[0] = 0xFF;
-    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_INCR(MCP_REG_ADDR_ADCDATA);
+    tx[0] = MCP_CMD_DEV_ADDR | MCP_CMD_ADC_REG_READ_STAT(MCP_REG_ADDR_ADCDATA);
 
     gpio_put(s->cs,MCP_CS_SELECT);
     sleep_us(MCP_SLEEPTIME_US);
 
-    // length of 3: one status byte, two ADC bytes.
-    spi_write_read_blocking(s->spi, tx, rx, 3);
+    // length of : one status byte, four ADC bytes.
+    spi_write_read_blocking(s->spi, tx, rx, 5);
 
     sleep_us(MCP_SLEEPTIME_US);
     gpio_put(s->cs,MCP_CS_DESELECT);
 
-    *dst = rx[1]<<8 | rx[2];
+    *dst = rx[3]<<8 | rx[4];
+    *(dst+1) = rx[1]<<8 | rx[2];
     return rx[0];
 }
 

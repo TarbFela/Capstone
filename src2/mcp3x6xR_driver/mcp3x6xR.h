@@ -105,6 +105,7 @@
     * 0x = One-shot conversion or one-shot cycle in SCAN mode. It sets ADC_MODE[1:0] to ‘0x’ (ADC
     * Shutdown) at the end of the conversion or at the end of the conversion cycle in SCAN mode (default).
     */
+#define MCP_CFG_CONV_MODE_BITS (0x3<<6)
 #define MCP_CFG3_CONV_MODE_CONTINUOUS (0x3<<6)
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY (0x2<<6)
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_SHTDWN 0x0
@@ -125,6 +126,24 @@
 #define MCP5_CFG3_DATA_FORMAT_32_SGN (0x2<<4)
 #define MCP5_CFG3_DATA_FORMAT_32_LJ (0x1<<4)
 #define MCP5_CFG3_DATA_FORMAT_24 0x0
+
+/* **SPECIFIC TO 16-bit ADC (MCP346xR)!!**
+ * 11 = 32-bit (17-bit right justified data + Channel ID): CHID[3:0] + SGN extension (12 bits) + 16-bit ADC
+*       data; it allows overrange with the SGN extension
+*  10 = 32-bit (17-bit right justified data): SGN extension (8-bit) + 16-bit ADC data; it allows overrange with
+*       the SGN extension
+*  01 = 32-bit (16-bit left justified data): 16-bit ADC data + 0x0000 (16 bit); it does not allow overrange (ADC
+*       code locked to 0xFFFF or 0x8000)
+*  00 = 16-bit (default ADC coding): 16-bit ADC data; it does not allow overrange (ADC code locked to
+*       0xFFFF or 0x8000)
+ */
+
+#define MCP4_CFG3_DATA_FORMAT_32_CHID_SGN12_16 (0x3<<4)
+#define MCP4_CFG3_DATA_FORMAT_32_SGN (0x2<<4)
+#define MCP4_CFG3_DATA_FORMAT_32_LJ (0x1<<4)
+#define MCP4_CFG3_DATA_FORMAT_16 0x0
+
+#define MCP_CFG3_DATA_FORMAT_BITS (0x3<<4)
 
 /* bit 3 CRC_FORMAT: CRC Checksum Format Selection on Read Communications
     * (it does not affect CRCCFG coding)
@@ -317,6 +336,52 @@ bit 1-0 ADC_MODE[1:0]: ADC Operating Mode Selection
 #define MCP_CFG0_ADC_MODE_CONV      0x3
 #define MCP_CFG0_ADC_MODE_STDBY     0x2
 #define MCP_CFG0_ADC_MODE_SHTDWN    0x0
+
+
+/*------------------------------*
+ *          IRQ Register        *
+ *------------------------------*/
+/*
+bit 7 Unimplemented: Read as ‘0’
+ */
+/*
+bit 6 nDR_STATUS: Data Ready Status Flag
+1 = ADCDATA has not been updated since last reading or last Reset (default)
+0 = New ADCDATA ready for reading
+bit 5 nCRCCFG_STATUS: CRC Error Status Flag Bit for Internal Registers
+1 = CRC error has not occurred for the Configuration registers (default)
+0 = CRC error has occurred for the Configuration registers
+bit 4 bit 3-2 nPOR_STATUS: POR Status Flag
+1 = POR has not occurred since the last reading (default)
+0 = POR has occurred since the last reading
+ */
+#define MCP_IRQ_nDR_STATUS      (0x1<<6)
+#define MCP_IRQ_nCRCCFG_STATUS  (0x1<<5)
+#define MCP_IRQ_nPOR_STATUS     (0x1<<4)
+
+/*
+IRQ_MODE[1:0]: Configuration for the IRQ/MDAT Pin(1)
+IRQ_MODE[1]: IRQ/MDAT Selection
+1 = MDAT output is selected. Only POR and CRC interrupts can be present on this pin and take priority
+over the MDAT output
+bit 1 bit 0 Note 1: 0 = IRQ output is selected. All interrupts can appear on the IRQ/MDAT pin
+IRQ_MODE[0]: IRQ Pin Inactive State Selection
+1 = The Inactive state is logic high (does not require a pull-up resistor to DVDD)
+0 = The Inactive state is High-Z (requires a pull-up resistor to DVDD) (default)
+EN_FASTCMD: Enable Fast Commands in the COMMAND Byte
+1 = Fast commands are enabled (default)
+0 = Fast commands are disabled
+EN_STP: Enable Conversion Start Interrupt Output
+1 = Enabled (default)
+0 = Disabled
+ */
+#define MCP_IRQ_EN_STP      (0x1)
+#define MCP_IRQ_EN_FSTCMD   (0x1<<1)
+#define MCP_IRQ_IRQ_INACTIVE_HI_Z (0x0)
+#define MCP_IRQ_IRQ_INACTIVE_LOGIC_HI (0x1<<2)
+#define MCP_IRQ_IRQ_MDAT_MODE (0x1<<3)
+#define MCP_IRQ_IRQ_nIRQ_MODE (0x0)
+
 
 
 /*======================================*

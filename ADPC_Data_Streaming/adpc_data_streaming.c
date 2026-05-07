@@ -28,19 +28,42 @@ volatile int dma_last_written = 0;
 
 volatile int cc = 1;
 
-void dma_irq_handler(void) {
+void dma_irq_handler_1(void) {
     // clear the correct interrupt
-    int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
+    int culprit_is_a = dma_hw->ints1 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
-        dma_hw->ints0 = 0x1 << (mpio_1.dma_a);
+        dma_hw->ints1 = 0x1 << (mpio_1.dma_a);
         dma_last_written = 1;
     }
     else {
-        dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
+        dma_hw->ints1 = 0x1 << (mpio_1.dma_b);
         dma_last_written = 2;
     }
     if(cc == 0) {
         mcp_pio_stop(&mpio_1);
+        //printf("DONE!\n");
+        dma_done = 1;
+        cc = 0;
+    }
+    else {
+        //printf("%d...",cc);
+        cc--;
+    }
+}
+
+void dma_irq_handler_0(void) {
+    // clear the correct interrupt
+    int culprit_is_a = dma_hw->ints0 & (1u << mpio_0.dma_a);
+    if (culprit_is_a) {
+        dma_hw->ints0 = 0x1 << (mpio_0.dma_a);
+        dma_last_written = 1;
+    }
+    else {
+        dma_hw->ints0 = 0x1 << (mpio_0.dma_b);
+        dma_last_written = 2;
+    }
+    if(cc == 0) {
+        mcp_pio_stop(&mpio_0);
         //printf("DONE!\n");
         dma_done = 1;
         cc = 0;
@@ -60,9 +83,10 @@ int main() {
 
     scanf(" %c",ui);
     printf("[input recieved]\n");
+    if(*ui == 'q') goto reboot;
     sleep_ms(100);
     printf("Initializing ADPC ADC(s)\n");
-    int as = adpc_adc_init(dma_irq_handler);
+    int as = adpc_adc_init(dma_irq_handler_1, dma_irq_handler_0);
     if(as != 0) {
         printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
         goto reboot;
@@ -84,11 +108,7 @@ int main() {
     mphb2_gpio_pwm_t hb_1B;
     mphb_gpio_init(&hb_1B, PWM_B_1_PIN, PWM_D_1_PIN, PH_EN_B1_PIN);
 
-
     printf("initialized!\n");
-
-
-
 
     printf("To reboot enter 'q'.\n"
            "To read samples, enter 'r'.\n"
@@ -97,6 +117,7 @@ int main() {
 
     int level = 0;
     int pwm_enabled = 0;
+    mcp_pio_t *mpio_r;
     while(1) {
         ui[0] = getchar_timeout_us(1000);
         if((int8_t)*ui == PICO_ERROR_TIMEOUT) {
@@ -139,7 +160,10 @@ int main() {
             printf("%d offset\n",level);
             mphb_set_levels(&hb_1B,300+level,300-level);
         }
-        else if (*ui == 'r') {
+        else if (*ui == 'r' || *ui == 'R') {
+            mpio_r = (*ui=='r') ? &mpio_0: &mpio_1;
+            printf("using %s\n",mpio_r == &mpio_1 ? "ADC 1" : "ADC 0");
+
             dma_done = 0;
             int pii = 0;
             uint bsent = 0;
@@ -149,14 +173,14 @@ int main() {
             sleep_ms(100);
             // Mute stdio over USB
             stdio_set_driver_enabled(&stdio_usb, false);
-            if(adpc_adc_start() != 0) {
+            if(adpc_adc_start(mpio_r) != 0) {
                 printf("ADPC START ERROR!\n");
                 goto reboot;
             }
             while(!dma_done) {
                 while(dma_last_written == dma_last_printed) tight_loop_contents();
                 // Blast raw data
-                bsent += tud_cdc_write(dma_buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
+                bsent += tud_cdc_write(mpio_r->buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
                 tud_cdc_write_flush();
                 while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
                 //tud_task();

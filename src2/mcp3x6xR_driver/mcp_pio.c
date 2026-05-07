@@ -5,8 +5,11 @@
 
 #include "mcp_pio.pio.h"
 
+#include <stdio.h>
 
-volatile uint32_t dma_buff[DMA_BUFF_SIZE*2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
+
+volatile uint32_t dma_buff_adc_0[DMA_BUFF_SIZE * 2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
+volatile uint32_t dma_buff_adc_1[DMA_BUFF_SIZE * 2] __attribute__((aligned(DMA_BUFF_SIZE*sizeof(uint32_t))));
 
 const uint32_t dma_buff_alignment_bytes = 31 - __builtin_clz(DMA_BUFF_SIZE*sizeof(uint32_t));
 
@@ -14,10 +17,26 @@ const uint32_t dma_buff_alignment_bytes = 31 - __builtin_clz(DMA_BUFF_SIZE*sizeo
  * Expects GPIOs to be initialized for SPI and expects the mcp info struct to already be built up.
  */
 void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma_handler)(void)) {
-    PIO pio = pio0;
-    int sm = 0;
+    // I couldn't figure out the PIO "claim unused channel", so we're doing something uglier. Sorry!
+    PIO pio;
+    static int call_count = 0;
+    uint irqn;
+    if(call_count == 0) {
+        pio = pio0;
+        call_count++;
+        irqn = DMA_IRQ_0;
+    } else if (call_count == 1) {
+        pio = pio1;
+        call_count++;
+        irqn = DMA_IRQ_1;
+    } else {
+        panic("\n\tPANIC!! PIO INIT MAY ONLY BE CALLED TWICE.\n");
+    }
+    //printf("claiming sm...\n");
+    int sm = pio_claim_unused_sm(pio, true);
+    //printf("adding program...\n");
     uint32_t offset = pio_add_program(pio, &mcp_conversions_read_program);
-
+    //printf("reading program config...\n");
     pio_sm_config c = mcp_conversions_read_program_get_default_config(offset);
     sm_config_set_clkdiv(&c, 125); //1Mhz is ok for now?
     sm_config_set_in_pins(&c, (mcp->miso));
@@ -31,9 +50,10 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
                                  1 << (mcp->sck),
                                  (1 << (mcp->sck)) | (1 << (mcp->miso)) | (1 << (mcp->nirq))
     );
-
+    //printf("pio sm init...\n");
     pio_sm_init(pio, sm, offset, &c);
 
+    //printf("dma init...\n");
     uint dma_a = dma_claim_unused_channel(true);
     uint dma_b = dma_claim_unused_channel(true);
 
@@ -55,13 +75,12 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
             false
             );
 
-//
+
     dma_channel_config cfg_b = dma_channel_get_default_config(dma_b);
     channel_config_set_transfer_data_size(&cfg_b, DMA_SIZE_32);
     channel_config_set_read_increment(&cfg_b, false);
     channel_config_set_write_increment(&cfg_b, true);
     channel_config_set_ring(&cfg_b, 1, dma_buff_alignment_bytes);
-
     channel_config_set_dreq(&cfg_b, pio_get_dreq(pio,sm,false));
     channel_config_set_chain_to(&cfg_b,dma_a);
     dma_channel_configure(
@@ -71,14 +90,18 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
             false
     );
 
-    irq_set_exclusive_handler(DMA_IRQ_0,dma_handler);
+    //printf("set handler...\n");
 
+    irq_set_exclusive_handler(irqn,dma_handler);
+
+    //printf("populate struct...\n");
     s->pio = pio;
     s->sm = sm;
     s->mcp_info = mcp;
     s->dma_a = dma_a;
     s->dma_b = dma_b;
     s->buff = sample_buff;
+    s->irqn = irqn;
 }
 
 /*
@@ -89,16 +112,23 @@ void mcp_pio_start(mcp_pio_t *s) {
                                  1 << (s->mcp_info->sck),
                                  (1 << (s->mcp_info->sck)) | (1 << (s->mcp_info->miso)) | (1 << (s->mcp_info->nirq))
     );
-    gpio_set_function(s->mcp_info->miso, GPIO_FUNC_PIO0);
-    gpio_set_function(s->mcp_info->sck, GPIO_FUNC_PIO0);
-    gpio_set_function(s->mcp_info->nirq, GPIO_FUNC_PIO0);
+    // this logic makes an assumption. Beware.
+    gpio_set_function(s->mcp_info->miso, (s->pio == pio0) ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
+    gpio_set_function(s->mcp_info->sck, (s->pio == pio0) ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
+    gpio_set_function(s->mcp_info->nirq, (s->pio == pio0) ? GPIO_FUNC_PIO0 : GPIO_FUNC_PIO1);
 
     pio_sm_restart(s->pio, s->sm);
     pio_sm_clear_fifos(s->pio, s->sm);
 
-    dma_channel_set_irq0_enabled(s->dma_a, true);
-    dma_channel_set_irq0_enabled(s->dma_b, true);
-    irq_set_enabled(DMA_IRQ_0, true);
+    if(s->irqn == DMA_IRQ_0) {
+        dma_channel_set_irq0_enabled(s->dma_a, true);
+        dma_channel_set_irq0_enabled(s->dma_b, true);
+    }
+    else if (s->irqn == DMA_IRQ_1) {
+        dma_channel_set_irq1_enabled(s->dma_a, true);
+        dma_channel_set_irq1_enabled(s->dma_b, true);
+    }
+    irq_set_enabled(s->irqn, true);
     dma_channel_set_transfer_count(s->dma_a,DMA_BUFF_SIZE,false);
     dma_channel_set_transfer_count(s->dma_b,DMA_BUFF_SIZE,false);
     dma_channel_set_write_addr(s->dma_b,s->buff + DMA_BUFF_SIZE,false);
@@ -112,9 +142,16 @@ void mcp_pio_start(mcp_pio_t *s) {
  */
 void __not_in_flash_func(mcp_pio_stop)(mcp_pio_t *s) {
     pio_sm_set_enabled(s->pio, s->sm, false);
-    irq_set_enabled(DMA_IRQ_0, false);
-    dma_channel_set_irq0_enabled(s->dma_a, false);
-    dma_channel_set_irq0_enabled(s->dma_b, false);
+    irq_set_enabled(s->irqn, false);
+
+    if(s->irqn == DMA_IRQ_0) {
+        dma_channel_set_irq0_enabled(s->dma_a, false);
+        dma_channel_set_irq0_enabled(s->dma_b, false);
+    }
+    else if (s->irqn == DMA_IRQ_1) {
+        dma_channel_set_irq1_enabled(s->dma_a, false);
+        dma_channel_set_irq1_enabled(s->dma_b, false);
+    }
     dma_channel_abort(s->dma_a);
     dma_channel_abort(s->dma_b);
 

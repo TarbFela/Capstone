@@ -64,10 +64,10 @@ Some effort has been made to catch loss of communication with the ADC. However, 
 
 ## PIO
 
-Included here is a PIO program to operate the device in continuous read mode, wherein the nIRQ pin on the ADC is pulled low when a conversion is ready. This triggers the PIO to initiate a SPI read (i.e. the PIO machine sends out 32 clock cycles and shifts the MISO data into a fifo). DMAs are daisy-chained. A globally accessible DMA buffer (`dma_buff`) is provided. It is aligned such that the DMAs should automatically wrap upon filling their respective halves of the buffer. **It is important that the DMAs be provided an interrupt handler to clear interrupts**. See an example below:
+Included here is a PIO program to operate the device in continuous read mode, wherein the nIRQ pin on the ADC is pulled low when a conversion is ready. This triggers the PIO to initiate a SPI read (i.e. the PIO machine sends out 32 clock cycles and shifts the MISO data into a fifo). DMAs are daisy-chained. A globally accessible DMA buffer (`dma_buff_adc_0`) is provided. It is aligned such that the DMAs should automatically wrap upon filling their respective halves of the buffer. **It is important that the DMAs be provided an interrupt handler to clear interrupts**. See an example below:
 
 ```
-void dma_irq_handler(void) {
+void dma_irq_handler_1(void) {
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {

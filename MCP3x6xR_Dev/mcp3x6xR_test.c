@@ -28,7 +28,7 @@ volatile int dma_last_written = 0;
 
 volatile int cc = 1;
 
-void dma_irq_handler(void) {
+void dma_irq_handler_1(void) {
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
@@ -54,6 +54,7 @@ void dma_irq_handler(void) {
 
 
 
+
 int main() {
     stdio_init_all();
     char ui[64];
@@ -62,7 +63,7 @@ int main() {
     printf("[input recieved]\n");
     sleep_ms(100);
     printf("Initializing ADPC ADC(s)\n");
-    int as = adpc_adc_init(dma_irq_handler);
+    int as = adpc_adc_init(dma_irq_handler_1, dma_irq_handler_1);
     if(as != 0) {
         printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
         goto reboot;
@@ -82,8 +83,6 @@ int main() {
 
     printf("initialized!\n");
 
-
-
 sample:
     printf("To reboot enter 'q'. To read samples, enter a number.\n");
     scanf(" %s",ui);
@@ -97,39 +96,11 @@ sample:
     sleep_ms(100);
     if(ui[0] == 'q') goto reboot;
 
-    dma_done = 0;
-    int pii = 0;
-    uint bsent = 0;
-    int dma_last_printed = dma_last_written;
-    printf("STREAMING RAW DATA:\n");
-    sleep_ms(100);
-    // Mute stdio over USB
-    stdio_set_driver_enabled(&stdio_usb, false);
-    if(adpc_adc_start() != 0) {
-        printf("ADPC START ERROR!\n");
-        goto reboot;
-    }
-    while(!dma_done) {
-        while(dma_last_written == dma_last_printed) tight_loop_contents();
-        // Blast raw data
-        bsent += tud_cdc_write(dma_buff + (dma_last_written-1)*DMA_BUFF_SIZE, DMA_BUFF_SIZE*sizeof(uint32_t));
-        tud_cdc_write_flush();
-        while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
-        //tud_task();
-        dma_last_printed = dma_last_written;
-        pii ++;
-    }
-    // Restore stdio
-    stdio_set_driver_enabled(&stdio_usb, true);
-    printf("\nEND RAW DATA STREAM\n");
-    printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
-//    printf("Samples:\n");
-//    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-//        printf("[%01ld]",dma_buff[i]>>29);
-//        sign_extend_24_to_32(dma_buff[i]);
-//        printf(" %-10ld  ",dma_buff[i]);
-//        if((i%8)==7) printf("\n",i);
-//    }
+    printf("Taking single conversion...\n");
+    uint16_t res[2] = {0,0};
+    mcp_single_conversion(&mcp_0, res);
+    printf("result = %04X %04X\n",res[0],res[1]);
+
     goto sample;
 
 
