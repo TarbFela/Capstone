@@ -24,6 +24,7 @@ add_executable(adpc_streaming
 		mcp3x6xR_driver/mcp_pio.c
 		adpc_app.c
 		adpc_app_funcs.c
+		adpc_core1.c
 )
 
 pico_generate_pio_header(adpc_streaming ${CMAKE_CURRENT_LIST_DIR}/mcp3x6xR_driver/mcp_pio.pio)
@@ -45,6 +46,7 @@ target_link_libraries(adpc_streaming
 		hardware_flash
 		hardware_clocks
 		pico_bootrom
+		pico_multicore
 )
 
 target_compile_definitions(adpc_streaming PRIVATE

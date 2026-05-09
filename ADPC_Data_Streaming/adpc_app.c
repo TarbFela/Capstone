@@ -1,5 +1,6 @@
 #include "adpc_app.h"
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include <string.h>
 #include "tusb.h"
 
@@ -13,6 +14,8 @@
 
 #include "adpc_app_funcs.h"
 
+#include "adpc_core1.h"
+
 
 volatile app_state_t ui_state = {
         .level = 0,
@@ -20,6 +23,7 @@ volatile app_state_t ui_state = {
         .is_streaming = false,
         .pwm_enabled = false,
         .ph_enabled = false,
+        .cl_ictl = false,
         .ui = {1,0}
 };
 
@@ -59,8 +63,20 @@ app_result_t app_dispatch(app_state_t *s) {
         printf("[set pwm_en ENABLED]\n");
     }
     if(strncmp(ui,"pwmd",4) == 0) {
+        if(adpc_init() != APP_OK) return APP_ERROR;
+        mphb_set_pwm_en(HB1B, true);
+        mphb_set_pwm_en(HB2B, true);
+        printf("[set pwm_en ENABLED]\n");
+        mphb_set_dlevel_all(0);
+        mphb_set_ph_en(HB1B, true);
+        mphb_set_ph_en(HB2B, true);
+        printf("[set ph_en ENABLED]\n");
+        return APP_OK;
+    }
+    if(strncmp(ui,"start",5)) {
         mphb_set_levels_all(0,0);
         printf("[set pwm to 0]\n");
+
     }
     if(strncmp(ui,"rstream",7) == 0) {
         return app_cmd_rstream(s);
@@ -86,6 +102,17 @@ app_result_t app_dispatch(app_state_t *s) {
             printf("\t[%d] %ld\n", buff[i]>>28,buff[i]&0xFFFFFF);
         }
         return APP_OK;
+    }
+    if(strncmp(ui,"ictl",4) == 0) {
+        if(s->cl_ictl) {
+            multicore_fifo_push_timeout_us(MC_FIFO_STOP_FLAG, 100);
+            printf("Core 1 pushed...\n");
+        }
+        else {
+            printf("Launching Core 1\n");
+            multicore_launch_core1(core1_ictl);
+        }
+
     }
 
     printf("%s\n",ui);

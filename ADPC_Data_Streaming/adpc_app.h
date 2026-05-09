@@ -15,6 +15,7 @@ typedef struct {
     bool is_streaming;
     bool pwm_enabled;
     bool ph_enabled;
+    bool cl_ictl;
 } app_state_t;
 
 typedef enum {APP_OK, APP_RUNNING, APP_INVALID_ARG, APP_ERROR, APP_STOP_STREAM, APP_REBOOT} app_result_t;
