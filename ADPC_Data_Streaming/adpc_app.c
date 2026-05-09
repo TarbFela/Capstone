@@ -63,7 +63,7 @@ app_result_t app_dispatch(app_state_t *s) {
         printf("[set pwm to 0]\n");
     }
     if(strncmp(ui,"rstream",7) == 0) {
-        app_cmd_rstream(s);
+        return app_cmd_rstream(s);
     }
 
     printf("%s\n",ui);

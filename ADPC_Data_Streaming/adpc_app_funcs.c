@@ -159,5 +159,6 @@ app_result_t app_cmd_rstream(app_state_t *s) {
     sleep_ms(100);
     printf("\nEND RAW DATA STREAM\n");
     printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
+    s->is_streaming = false;
     return APP_OK;
 }
