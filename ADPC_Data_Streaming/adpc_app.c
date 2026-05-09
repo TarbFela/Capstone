@@ -25,18 +25,77 @@ volatile app_state_t ui_state = {
 
 
 app_result_t app_dispatch(app_state_t *s) {
+    static bool inited = false;
     char *argv[MAX_UI_ARGS];
-    printf("%s\n",s->ui);
     char *ui = s->ui;
 
     if (s->ui[0] == 'q') return APP_REBOOT;
-    if(strncmp(s->ui, "init",4) == 0) {return adpc_init();}
+    if(strncmp(s->ui, "init",4) == 0) {
+        if(inited) {
+            if(!s->is_streaming) printf("Already initialized. Restart to initialize again!\n");
+            return APP_OK;
+        }
+        inited = true;
+        return adpc_init();
+    }
     if(strncmp(s->ui, "level  ",6) == 0) {
         int level = atoi(s->ui + 6);
-        printf("LEVEL: %d\n",level);
+        mphb_set_dlevel_all(level);
+        if(!s->is_streaming) printf("[set level to %d]\n",level);
+    }
+    if(strncmp(ui,"phen",4) == 0) {
+        mphb_set_ph_en(HB1B, true);
+        mphb_set_ph_en(HB2B, true);
+        printf("[set ph_en ENABLED]\n");
+    }
+    if(strncmp(ui,"phd",3) == 0) {
+        mphb_set_ph_en(HB1B, false);
+        mphb_set_ph_en(HB2B, false);
+        printf("[set ph_en DISABLED]\n");
+    }
+    if(strncmp(ui,"pwmen",5) == 0) {
+        mphb_set_pwm_en(HB1B, true);
+        mphb_set_pwm_en(HB2B, true);
+        printf("[set pwm_en ENABLED]\n");
+    }
+    if(strncmp(ui,"pwmd",4) == 0) {
+        mphb_set_levels_all(0,0);
+        printf("[set pwm to 0]\n");
+    }
+    if(strncmp(ui,"rstream",7) == 0) {
+        app_cmd_rstream(s);
     }
 
+    printf("%s\n",ui);
     return APP_OK;
+}
+
+app_result_t app_dispatch_single_char(app_state_t *s, char ui) {
+    if(ui == 'e') {
+        mphb_set_ph_en(HB1B, true);
+        mphb_set_ph_en(HB2B, true);
+        return APP_OK;
+//                            printf("ENABLE PIN ON\n");
+    }
+    if(ui == 'd') {
+        mphb_set_ph_en(HB1B, false);
+        mphb_set_ph_en(HB2B, false);
+        return APP_OK;
+//                            printf("ENABLE PIN OFF\n");
+    }
+    else if ((ui >= '0') && (ui <= '9')) {
+        s->level = (ui-'0')*5;
+//                            printf("%d offset\n",level);
+        mphb_set_dlevel_all( s->level);
+        return APP_OK;
+    }
+    else if (ui == 'p' || ui == 'l') {
+        s->level += (ui == 'p') ? 1 : -1;
+//                            printf("%d offset\n",level);
+        mphb_set_dlevel_all( s->level);
+        return APP_OK;
+    }
+    return APP_STOP_STREAM;
 }
 
 

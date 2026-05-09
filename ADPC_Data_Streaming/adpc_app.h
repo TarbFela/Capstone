@@ -17,11 +17,12 @@ typedef struct {
     bool ph_enabled;
 } app_state_t;
 
-typedef enum {APP_OK, APP_RUNNING, APP_ERROR, APP_REBOOT} app_result_t;
+typedef enum {APP_OK, APP_RUNNING, APP_ERROR, APP_STOP_STREAM, APP_REBOOT} app_result_t;
 
 extern volatile app_state_t ui_state;
 
 app_result_t app_dispatch(app_state_t *s);
+app_result_t app_dispatch_single_char(app_state_t *s, char ui);
 app_result_t app_shell_task(app_state_t *s);
 
 #endif
