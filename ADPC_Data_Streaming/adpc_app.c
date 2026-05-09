@@ -31,6 +31,10 @@ app_result_t app_dispatch(app_state_t *s) {
 
     if (s->ui[0] == 'q') return APP_REBOOT;
     if(strncmp(s->ui, "init",4) == 0) {return adpc_init();}
+    if(strncmp(s->ui, "level  ",6) == 0) {
+        int level = atoi(s->ui + 6);
+        printf("LEVEL: %d\n",level);
+    }
 
     return APP_OK;
 }
@@ -52,8 +56,10 @@ app_result_t app_shell_task(app_state_t *s) {
     // check for different
     if((char)uic == UI_BACKSPACE) {
         if(s->ui_cursor == 0) return APP_RUNNING;
+
         printf("\b \b");
         s->ui_cursor -= 1;
+        return APP_RUNNING;
     }
     // echo
     putchar((char)uic);
