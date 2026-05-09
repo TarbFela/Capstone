@@ -18,7 +18,7 @@ typedef struct {
     bool cl_ictl;
 } app_state_t;
 
-typedef enum {APP_OK, APP_RUNNING, APP_INVALID_ARG, APP_ERROR, APP_STOP_STREAM, APP_REBOOT} app_result_t;
+typedef enum {APP_OK, APP_RUNNING, APP_INVALID_ARG, APP_TIMEOUT, APP_ERROR, APP_STOP_STREAM, APP_REBOOT} app_result_t;
 
 extern volatile app_state_t ui_state;
 

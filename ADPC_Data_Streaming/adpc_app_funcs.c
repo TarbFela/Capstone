@@ -100,7 +100,8 @@ app_result_t adpc_init() {
     printf("Initializing MPHB connection(s)\n");
     mphb_gpio_init(HB1B);
     mphb_gpio_init(HB2B);
-    mphb_setup_multiphase_masked((1U<<HB1B) | (1U<<HB2B));
+    mphb_gpio_init(HB3B);
+    mphb_setup_multiphase_masked((1U<<HB1B) | (1U<<HB2B) | (1U<<HB3B));
 
     printf("initialized!\n");
     return APP_OK;

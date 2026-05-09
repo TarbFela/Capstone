@@ -47,35 +47,52 @@ app_result_t app_dispatch(app_state_t *s) {
         mphb_set_dlevel_all(level);
         if(!s->is_streaming) printf("[set level to %d]\n",level);
     }
+    if(strncmp(s->ui, "isp ",4) == 0) {
+        if(!s->cl_ictl) return APP_INVALID_ARG;
+        float sp = atof(s->ui + 4);
+        int32_t sp_scaled = sp * 162.4203245 - -25.41180842;
+        if(multicore_fifo_push_timeout_us(sp_scaled,100)) {
+            if(multicore_fifo_pop_timeout_us(100, &sp_scaled)) {
+                if (!s->is_streaming) printf("[set ictl setpoint to %4.2f amps]\n", (float)sp_scaled * 0.006156071217 + 0.1572961424);
+                return APP_OK;
+            }
+        }
+        return APP_TIMEOUT;
+    }
     if(strncmp(ui,"phen",4) == 0) {
         mphb_set_ph_en(HB1B, true);
         mphb_set_ph_en(HB2B, true);
+        mphb_set_ph_en(HB3B, true);
         printf("[set ph_en ENABLED]\n");
     }
     if(strncmp(ui,"phd",3) == 0) {
         mphb_set_ph_en(HB1B, false);
         mphb_set_ph_en(HB2B, false);
+        mphb_set_ph_en(HB3B, false);
         printf("[set ph_en DISABLED]\n");
     }
     if(strncmp(ui,"pwmen",5) == 0) {
         mphb_set_pwm_en(HB1B, true);
         mphb_set_pwm_en(HB2B, true);
+        mphb_set_pwm_en(HB3B, true);
         printf("[set pwm_en ENABLED]\n");
     }
     if(strncmp(ui,"pwmd",4) == 0) {
+        mphb_set_levels_all(0,0);
+        printf("[set pwm to 0]\n");
+    }
+    if(strncmp(ui,"start",5) == 0) {
         if(adpc_init() != APP_OK) return APP_ERROR;
         mphb_set_pwm_en(HB1B, true);
         mphb_set_pwm_en(HB2B, true);
+        mphb_set_pwm_en(HB3B, true);
         printf("[set pwm_en ENABLED]\n");
         mphb_set_dlevel_all(0);
         mphb_set_ph_en(HB1B, true);
         mphb_set_ph_en(HB2B, true);
+        mphb_set_ph_en(HB3B, true);
         printf("[set ph_en ENABLED]\n");
         return APP_OK;
-    }
-    if(strncmp(ui,"start",5)) {
-        mphb_set_levels_all(0,0);
-        printf("[set pwm to 0]\n");
 
     }
     if(strncmp(ui,"rstream",7) == 0) {
@@ -107,6 +124,9 @@ app_result_t app_dispatch(app_state_t *s) {
         if(s->cl_ictl) {
             multicore_fifo_push_timeout_us(MC_FIFO_STOP_FLAG, 100);
             printf("Core 1 pushed...\n");
+            multicore_fifo_pop_blocking();
+            sleep_ms(100);
+            multicore_reset_core1();
         }
         else {
             printf("Launching Core 1\n");
@@ -123,12 +143,14 @@ app_result_t app_dispatch_single_char(app_state_t *s, char ui) {
     if(ui == 'e') {
         mphb_set_ph_en(HB1B, true);
         mphb_set_ph_en(HB2B, true);
+        mphb_set_ph_en(HB3B, true);
         return APP_OK;
 //                            printf("ENABLE PIN ON\n");
     }
     if(ui == 'd') {
         mphb_set_ph_en(HB1B, false);
         mphb_set_ph_en(HB2B, false);
+        mphb_set_ph_en(HB3B, false);
         return APP_OK;
 //                            printf("ENABLE PIN OFF\n");
     }
