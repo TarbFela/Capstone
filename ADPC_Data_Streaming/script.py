@@ -174,9 +174,15 @@ def main():
                 print("\n[r] Waiting for stream start...")
                 wait_for(port, "STREAMING RAW DATA")
                 print("    Stream started.")
-                print(f"    Stream started. Collecting for {STREAM_DURATION}s...")
+                print(f"    Stream started. Collecting...")
 
-                time.sleep(STREAM_DURATION)
+                while(True):
+                    ui = input("cmd> ").strip()
+                    if not ui:
+                        break
+                    ch = ui[0]
+                    send_char(port, ch)
+
                 send_char(port, 'c')  # stop the stream
 
                 raw_bytes = read_raw_stream(port)

@@ -83,8 +83,7 @@ int main() {
     }
 
     printf("Initializing MPHB connection(s)\n");
-    mphb2_gpio_pwm_t hb_1B;
-    mphb_gpio_init(&hb_1B, PWM_B_1_PIN, PWM_D_1_PIN, PH_EN_B1_PIN);
+    mphb_gpio_init(HB1B);
 
     printf("initialized!\n");
 
@@ -105,38 +104,38 @@ int main() {
             printf("RECIEVED [%c]\n",*ui);
         }
         if(*ui == 'q') {
-            mphb_set_levels(&hb_1B,0,0);
+            mphb_set_levels(HB1B,0,0);
             goto reboot;
         }
         if(*ui == ' ') {
             pwm_enabled = !pwm_enabled;
             printf("Setting PWM state to %s\n",pwm_enabled ? "ENABLED" : "DISABLED");
-            if (!pwm_enabled) {
-                mphb_set_levels(&hb_1B,0,0);
+            if (pwm_enabled) {
+                mphb_set_dlevel(HB1B, level);
             }
             else {
-                mphb_set_levels(&hb_1B,300,300);
+                mphb_set_levels(HB1B,0,0);
             }
             sleep_us(100); // let the PWM go to zero and then disable it.
             pwm_set_enabled(hb_1B.slice, pwm_enabled);
         }
         if(*ui == 'e') {
-            gpio_put(PH_EN_B1_PIN, 1);
+            mphb_set_ph_en(HB1B, true);
             printf("ENABLE PIN ON\n");
         }
         if(*ui == 'd') {
-            gpio_put(PH_EN_B1_PIN, 0);
+            mphb_set_ph_en(HB1B, false);
             printf("ENABLE PIN OFF\n");
         }
         else if ((*ui >= '0') && (*ui <= '9')) {
-            level = (*ui-'0')*15;
+            level = (*ui-'0')*5;
             printf("%d offset\n",level);
-            mphb_set_levels(&hb_1B,300+level,300-level);
+            mphb_set_levels(HB1B, 500+level, 500-level);
         }
         else if (*ui == 'p' || *ui == 'l') {
-            level += (*ui == 'p') ? 5 : -5;
+            level += (*ui == 'p') ? 1 : -1;
             printf("%d offset\n",level);
-            mphb_set_levels(&hb_1B,300+level,300-level);
+            mphb_set_levels(HB1B, 500+level, 500-level);
         }
         else if (*ui == 'r' || *ui == 'R') {
             int pii = 0;
@@ -160,10 +159,32 @@ int main() {
             while(1) {
                 while(dma0_last_written == dma0_last_printed && dma1_last_written == dma1_last_printed) {
                     if( tud_cdc_available() ) {
-                        mcp_pio_stop(&mpio_0);
-                        mcp_pio_stop(&mpio_1);
-                        ui_exit_signal = 1;
-                        break;
+                        uint32_t uii = tud_cdc_read_char();
+                        if(uii!=-1) *ui = (char)uii;
+                        if(*ui == 'e') {
+                            mphb_set_ph_en(HB1B, true);
+//                            printf("ENABLE PIN ON\n");
+                        }
+                        if(*ui == 'd') {
+                            mphb_set_ph_en(HB1B, false);
+//                            printf("ENABLE PIN OFF\n");
+                        }
+                        else if ((*ui >= '0') && (*ui <= '9')) {
+                            level = (*ui-'0')*5;
+//                            printf("%d offset\n",level);
+                            mphb_set_levels(HB1B, 500+level, 500-level);
+                        }
+                        else if (*ui == 'p' || *ui == 'l') {
+                            level += (*ui == 'p') ? 1 : -1;
+//                            printf("%d offset\n",level);
+                            mphb_set_levels(HB1B, 500+level, 500-level);
+                        }
+                        else {
+                            mcp_pio_stop(&mpio_0);
+                            mcp_pio_stop(&mpio_1);
+                            ui_exit_signal = 1;
+                            break;
+                        }
                     }
                 };
                 if(ui_exit_signal) break;
