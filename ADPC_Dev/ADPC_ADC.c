@@ -35,7 +35,7 @@ int adpc_adc_init(void (*dma_handler_1)(void), void (*dma_handler_0)(void)) {
     cfg.cfgs[1] = MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_2048;
     cfg.cfgs[2] = MCP_CFG2_BIAS_CURRENT_SEL_1 | MCP_CFG2_ADC_GAIN_SEL_1 | MCP_CFG2_AUTO_ZERO_REF_EN | 0x1;
     // TODO: investigate using 16-bit data format for some DSP instructions, maybe?
-    cfg.cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP4_CFG3_DATA_FORMAT_32_LJ;
+    cfg.cfgs[3] = MCP_CFG3_CONV_MODE_CONTINUOUS | MCP4_CFG3_DATA_FORMAT_32_SGN;
     cfg.input_mode = MCP_MUX_MODE;
     cfg.scan_sel = 0;
     cfg.mux_sel = MCP_MUX_P_SEL(MCP_MUX_VAL_CH0) | MCP_MUX_N_SEL(MCP_MUX_VAL_CH1);

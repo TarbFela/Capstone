@@ -57,10 +57,10 @@ void dma_irq_handler_0(void) {
         dma_hw->ints0 = 0x1 << (mpio_0.dma_b);
         dma0_last_written = 2;
     }
-    int32_t *buff = (int32_t *)mpio_0.buff + (dma0_last_written - 1) * DMA_BUFF_SIZE;
-    for(int i = 0; i<DMA_BUFF_SIZE; i++) {
-        buff[i] >>= 16;
-    }
+//    int32_t *buff = (int32_t *)mpio_0.buff + (dma0_last_written - 1) * DMA_BUFF_SIZE;
+//    for(int i = 0; i<DMA_BUFF_SIZE; i++) {
+//        buff[i] >>= 16;
+//    }
 }
 
 app_result_t adpc_init() {
