@@ -84,6 +84,8 @@ int main() {
 
     printf("Initializing MPHB connection(s)\n");
     mphb_gpio_init(HB1B);
+    mphb_gpio_init(HB2B);
+    mphb_setup_multiphase_masked((1U<<HB1B) | (1U<<HB2B));
 
     printf("initialized!\n");
 
@@ -104,38 +106,44 @@ int main() {
             printf("RECIEVED [%c]\n",*ui);
         }
         if(*ui == 'q') {
-            mphb_set_levels(HB1B,0,0);
+            mphb_set_levels_all(0,0);
             goto reboot;
         }
         if(*ui == ' ') {
             pwm_enabled = !pwm_enabled;
             printf("Setting PWM state to %s\n",pwm_enabled ? "ENABLED" : "DISABLED");
             if (pwm_enabled) {
-                mphb_set_dlevel(HB1B, level);
+                mphb_set_dlevel_all( level);
+                mphb_set_pwm_en(HB1B,true);
+                mphb_set_pwm_en(HB2B,true);
             }
             else {
-                mphb_set_levels(HB1B,0,0);
+                mphb_set_levels_all(0,0);
+                mphb_set_pwm_en(HB1B,false);
+                mphb_set_pwm_en(HB2B,false);
             }
             sleep_us(100); // let the PWM go to zero and then disable it.
-            pwm_set_enabled(hb_1B.slice, pwm_enabled);
+
         }
         if(*ui == 'e') {
             mphb_set_ph_en(HB1B, true);
+            mphb_set_ph_en(HB2B, true);
             printf("ENABLE PIN ON\n");
         }
         if(*ui == 'd') {
             mphb_set_ph_en(HB1B, false);
+            mphb_set_ph_en(HB2B, false);
             printf("ENABLE PIN OFF\n");
         }
         else if ((*ui >= '0') && (*ui <= '9')) {
             level = (*ui-'0')*5;
             printf("%d offset\n",level);
-            mphb_set_levels(HB1B, 500+level, 500-level);
+            mphb_set_dlevel_all( level);
         }
         else if (*ui == 'p' || *ui == 'l') {
             level += (*ui == 'p') ? 1 : -1;
             printf("%d offset\n",level);
-            mphb_set_levels(HB1B, 500+level, 500-level);
+            mphb_set_dlevel_all( level);
         }
         else if (*ui == 'r' || *ui == 'R') {
             int pii = 0;
@@ -172,12 +180,12 @@ int main() {
                         else if ((*ui >= '0') && (*ui <= '9')) {
                             level = (*ui-'0')*5;
 //                            printf("%d offset\n",level);
-                            mphb_set_levels(HB1B, 500+level, 500-level);
+                            mphb_set_dlevel_all( level);
                         }
                         else if (*ui == 'p' || *ui == 'l') {
                             level += (*ui == 'p') ? 1 : -1;
 //                            printf("%d offset\n",level);
-                            mphb_set_levels(HB1B, 500+level, 500-level);
+                            mphb_set_dlevel_all( level);
                         }
                         else {
                             mcp_pio_stop(&mpio_0);

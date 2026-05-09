@@ -13,6 +13,7 @@
  *
  */
 
+#define MPHB_PWM_WRAP 1000
 
 typedef struct {
     int pwm_a_pin;
@@ -44,11 +45,15 @@ void mphb_gpio_init(mphb_port_t i);
 
 // set each level individually
 void mphb_set_levels(mphb_port_t i, uint level_A, uint level_C);
+void mphb_set_levels_all(uint level_A, uint level_C);
 
 // set levels differentially about the common mode level (mphb_pwm_cm_level)
-void mphb_set_dlevel(mphb_port_t i, uint dlevel);
+void mphb_set_dlevel(mphb_port_t i, int dlevel);
+void mphb_set_dlevel_all(int dlevel);
 
 void mphb_set_ph_en(mphb_port_t i, bool enable);
 void mphb_set_pwm_en(mphb_port_t i, bool enable);
+
+void mphb_setup_multiphase_masked(uint32_t phases_mask);
 
 #endif

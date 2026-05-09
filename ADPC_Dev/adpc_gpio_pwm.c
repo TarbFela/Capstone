@@ -51,7 +51,7 @@ mphb2_gpio_pwm_t *mphb2_arr[6] = {
         &hb_3B
         };
 
-volatile uint32_t mphb_pwm_cm_level = 500;
+volatile uint32_t mphb_pwm_cm_level = MPHB_PWM_WRAP/2;
 
 void mphb_gpio_init(mphb_port_t i) {
     int pwm_ab_pin = mphb2_arr[i]->pwm_a_pin;
@@ -78,7 +78,7 @@ void mphb_gpio_init(mphb_port_t i) {
     pwm_config cfg = pwm_get_default_config();
     // 125MHz --> 100khz | 125M / 1.25 = 100MHz | Top = 500; Level = 1000
     pwm_config_set_clkdiv(&cfg, 1.25f);
-    pwm_config_set_wrap(&cfg, 1000);
+    pwm_config_set_wrap(&cfg, MPHB_PWM_WRAP);
     pwm_init(slice,&cfg,false);
     mphb_set_dlevel(i, 0);
 
@@ -91,13 +91,38 @@ void mphb_gpio_init(mphb_port_t i) {
     mphb2_arr[i]->initialized = true;
 }
 
-void mphb_set_levels(mphb_port_t i, uint level_A, uint level_C) {
-    pwm_set_chan_level(PWM_BD_1_SLICE,PWM_B_1_CHAN,level_A);
-    pwm_set_chan_level(PWM_BD_1_SLICE,PWM_D_1_CHAN,level_C);
+//  pass a mask constructed like so:
+// (1U<<HB1A) | (1U<<HB2B)
+// or whatever your situation is
+//  Will automatically assign phase shifts (PWM counter offsets) based on number of bits masked.
+//  Probably best to perform all necessary mphb_gpio_inits **first**.
+void mphb_setup_multiphase_masked(uint32_t phases_mask) {
+    int n = __builtin_popcount(phases_mask); // number of bits set in mask
+    int ni = 0; // counter as we find bits in mask
+    for(int i = HB1A; i<=HB3B; i++) { // go through the bits
+        if ( (phases_mask>>i) & 0x1 ) pwm_set_counter(mphb2_arr[i]->slice, (ni*mphb_pwm_cm_level)/n);
+    }
 }
 
-void mphb_set_dlevel(mphb_port_t i, uint dlevel) {
+void mphb_set_levels(mphb_port_t i, uint level_A, uint level_C) {
+    pwm_set_chan_level(mphb2_arr[i]->slice,mphb2_arr[i]->ch_A,level_A);
+    pwm_set_chan_level(mphb2_arr[i]->slice,mphb2_arr[i]->ch_C,level_C);
+}
+
+void mphb_set_levels_all(uint level_A, uint level_C) {
+    for(mphb_port_t i = 0; i<6; i++) {
+        mphb_set_levels(i, level_A, level_C);
+    }
+}
+
+void mphb_set_dlevel(mphb_port_t i, int dlevel) {
     mphb_set_levels(i, mphb_pwm_cm_level + (dlevel + 1)/2, mphb_pwm_cm_level - (dlevel/2) );
+}
+
+void mphb_set_dlevel_all(int dlevel) {
+    for(mphb_port_t i = 0; i<6; i++) {
+        mphb_set_dlevel(i, dlevel);
+    }
 }
 
 
