@@ -9,45 +9,48 @@
 #include "hardware/gpio.h"
 #include "pico/multicore.h"
 
-#include "mcp3x6xR_driver/mcp3x6xR.h"
-#include "../ADPC_Dev/ADPC_cfg.h"
-//#define ADC_1_PIN_MOSI      11
-//#define ADC_1_PIN_MISO      12
-//#define ADC_1_PIN_CS        13
-//#define ADC_1_PIN_SCK       10
-//#define ADC_1_PIN_IRQ       15
-//#define ADC_1_SPI           spi1
+#include <string.h>
 
+#include "mcp3x6xR_driver/mcp3x6xR.h"
 #include "mcp3x6xR_driver/mcp_pio.h"
+//#include "ada4255_driver/ada4255.h"
+
+#include "../ADPC_Dev/ADPC_cfg.h"
 
 #include "../ADPC_Dev/ADPC_ADC.h"
 
+#include "tusb.h"
 
 
-volatile int dma_done = 0;
-void dma_irq_handler(void) {
-    static int cc = 0;
+volatile int dma0_done = 0;
+// if none, 0, if A, 1, if B, 2
+volatile int dma_last_written = 0;
+
+volatile int cc = 1;
+
+void dma_irq_handler_1(void) {
     // clear the correct interrupt
     int culprit_is_a = dma_hw->ints0 & (1u << mpio_1.dma_a);
     if (culprit_is_a) {
         dma_hw->ints0 = 0x1 << (mpio_1.dma_a);
-        //dma_hw->ch[mpio.dma_a].write_addr = (io_rw_32)mpio.buff;
+        dma_last_written = 1;
     }
     else {
         dma_hw->ints0 = 0x1 << (mpio_1.dma_b);
-        //dma_hw->ch[mpio.dma_b].write_addr = (io_rw_32)(mpio.buff + DMA_BUFF_SIZE);
+        dma_last_written = 2;
     }
-    if(cc > 10) {
+    if(cc == 0) {
         mcp_pio_stop(&mpio_1);
-        printf("DONE!\n");
-        dma_done = 1;
+        //printf("DONE!\n");
+        dma0_done = 1;
         cc = 0;
     }
     else {
         //printf("%d...",cc);
-        cc++;
+        cc--;
     }
 }
+
 
 
 
@@ -58,42 +61,49 @@ int main() {
 
     scanf(" %c",ui);
     printf("[input recieved]\n");
+    sleep_ms(100);
     printf("Initializing ADPC ADC(s)\n");
-    int as = adpc_adc_init(dma_irq_handler);
+    int as = adpc_adc_init(dma_irq_handler_1, dma_irq_handler_1);
     if(as != 0) {
         printf("ADPC INITIALIZATION FAILED!\nError Code: %d\n",as);
         goto reboot;
     }
+//
+//    printf("Initializing ADPC PGIA\n");
+//    ada_info_t ada;
+//    ada_spi_init(&ada, PGIA_SPI, PGIA_PIN_MOSI, PGIA_PIN_MISO ,PGIA_PIN_CS, PGIA_PIN_SCK);
+//    int ada_status = ada_input_select(&ada, ADA_INPUT_2);
+//    if(ada_status) {
+//        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+//    }
+//    ada_status = ada_input_gain_select(&ada, ADA_INPUT_GAIN_32);
+//    if(ada_status) {
+//        printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
+//    }
 
-    printf("[awaiting user input]\n");
-    scanf(" %c",ui);
-    printf("[input recieved]\n");
-    if(ui[0] == 'q') goto reboot;
-
+    printf("initialized!\n");
 
 sample:
-    dma_done = 0;
-    int tii = 0;
-    if(adpc_adc_start() != 0) {
-        printf("ADPC START ERROR!\n");
-        goto reboot;
+    printf("To reboot enter 'q'. To read samples, enter a number.\n");
+    scanf(" %s",ui);
+    printf("[input recieved]\n");
+    if (ui[0] == 'q') goto reboot;
+    cc = atoi(ui);
+    if (cc == 0) {
+        printf("Invalid input.\n");
+        goto sample;
     }
-    while(!dma_done) {
-        sleep_ms(20);
-        if(tii++ > 100) {
-            printf("TIMEOUT!\n");
-            goto reboot;
-        }
-    }
-    printf("Samples:\n");
-    for(int i = 0; i<DMA_BUFF_SIZE*2; i++) {
-        printf("%10ld\t",dma_buff[i]);
-        if((i%8)==7) printf("\t[%d]\n",i);
-    }
+    sleep_ms(100);
+    if(ui[0] == 'q') goto reboot;
 
-    printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
-    scanf(" %c",ui);
-    if(ui[0]!='q') goto sample;
+    printf("Taking single conversion...\n");
+    uint16_t res[2] = {0,0};
+    mcp_single_conversion(&mcp_0, res);
+    printf("result = %04X %04X\n",res[0],res[1]);
+
+    goto sample;
+
+
 
 reboot:
     printf("\n\nREBOOT!\n");

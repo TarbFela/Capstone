@@ -7,10 +7,11 @@
 #include "mcp3x6xR.h"
 
 // size of each DMA's buffer.
-#define DMA_BUFF_SIZE 64
+#define DMA_BUFF_SIZE 128
 
 // Globally-accessible array for MCP/SIO/DMA data (i.e. readings). Aligned for DMA Ring mode.
-extern uint32_t dma_buff[DMA_BUFF_SIZE*2];
+extern volatile uint32_t dma_buff_adc_0[DMA_BUFF_SIZE * 2];
+extern volatile uint32_t dma_buff_adc_1[DMA_BUFF_SIZE * 2];
 
 typedef struct mcp_pio_t {
     PIO pio;
@@ -18,6 +19,7 @@ typedef struct mcp_pio_t {
     mcp_info_t *mcp_info;
     uint dma_a;
     uint dma_b;
+    uint irqn;
     uint32_t *buff;
 } mcp_pio_t;
 

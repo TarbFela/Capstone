@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include "hardware/spi.h"
 
+#define sign_extend_24_to_32(x) __asm__("sbfx %0, %0, #0, #24" : "+r"(x))
+
 
 /*
  * Commands are either Incremental Write, Incremental Read, Static Read, and Fast command
@@ -103,8 +105,9 @@
     * 0x = One-shot conversion or one-shot cycle in SCAN mode. It sets ADC_MODE[1:0] to ‘0x’ (ADC
     * Shutdown) at the end of the conversion or at the end of the conversion cycle in SCAN mode (default).
     */
-#define MCP_CFG3_CONV_MODE_CONTINUOUS 0x3<<6
-#define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY 0x2<<6
+#define MCP_CFG_CONV_MODE_BITS (0x3<<6)
+#define MCP_CFG3_CONV_MODE_CONTINUOUS (0x3<<6)
+#define MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY (0x2<<6)
 #define MCP_CFG3_CONV_MODE_ONE_SHOT_SHTDWN 0x0
 
 
@@ -119,10 +122,28 @@
     * 00 = 24-bit (default ADC coding): 24-bit ADC data. It does not allow overrange (ADC code locked to
     * 0xFFFFFF or 0x800000).
     */
-#define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 0x3<<4
-#define MCP5_CFG3_DATA_FORMAT_32_SGN 0x2<<4
-#define MCP5_CFG3_DATA_FORMAT_32_LJ 0x1<<4
+#define MCP5_CFG3_DATA_FORMAT_32_CHID_SGN4_24 (0x3<<4)
+#define MCP5_CFG3_DATA_FORMAT_32_SGN (0x2<<4)
+#define MCP5_CFG3_DATA_FORMAT_32_LJ (0x1<<4)
 #define MCP5_CFG3_DATA_FORMAT_24 0x0
+
+/* **SPECIFIC TO 16-bit ADC (MCP346xR)!!**
+ * 11 = 32-bit (17-bit right justified data + Channel ID): CHID[3:0] + SGN extension (12 bits) + 16-bit ADC
+*       data; it allows overrange with the SGN extension
+*  10 = 32-bit (17-bit right justified data): SGN extension (8-bit) + 16-bit ADC data; it allows overrange with
+*       the SGN extension
+*  01 = 32-bit (16-bit left justified data): 16-bit ADC data + 0x0000 (16 bit); it does not allow overrange (ADC
+*       code locked to 0xFFFF or 0x8000)
+*  00 = 16-bit (default ADC coding): 16-bit ADC data; it does not allow overrange (ADC code locked to
+*       0xFFFF or 0x8000)
+ */
+
+#define MCP4_CFG3_DATA_FORMAT_32_CHID_SGN12_16 (0x3<<4)
+#define MCP4_CFG3_DATA_FORMAT_32_SGN (0x2<<4)
+#define MCP4_CFG3_DATA_FORMAT_32_LJ (0x1<<4)
+#define MCP4_CFG3_DATA_FORMAT_16 0x0
+
+#define MCP_CFG3_DATA_FORMAT_BITS (0x3<<4)
 
 /* bit 3 CRC_FORMAT: CRC Checksum Format Selection on Read Communications
     * (it does not affect CRCCFG coding)
@@ -288,9 +309,10 @@ bit 5-4 CLK_SEL[1:0]: Clock Selection
 01 = External digital clock
 00 = External digital clock (default)
 */
-#define MCP_CFG0_CLK_SEL_INTERNAL_AMCLKOUT  0x3<<4
-#define MCP_CFG0_CLK_SEL_INTERNAL           0x2<<4
-#define MCP_CFG0_CLK_SEL_EXTERNAL           0x0
+#define MCP_CFG0_CLK_SEL_BITS               (0x3U<<4)
+#define MCP_CFG0_CLK_SEL_INTERNAL_AMCLKOUT  (0x3U<<4)
+#define MCP_CFG0_CLK_SEL_INTERNAL           (0x2U<<4)
+#define MCP_CFG0_CLK_SEL_EXTERNAL           (0x0)
 
 /*
 bit 3-2 CS_SEL[1:0]: Current Source/Sink Selection Bits for Sensor Bias (source on VIN+/Sink on VIN-)
@@ -314,6 +336,52 @@ bit 1-0 ADC_MODE[1:0]: ADC Operating Mode Selection
 #define MCP_CFG0_ADC_MODE_CONV      0x3
 #define MCP_CFG0_ADC_MODE_STDBY     0x2
 #define MCP_CFG0_ADC_MODE_SHTDWN    0x0
+
+
+/*------------------------------*
+ *          IRQ Register        *
+ *------------------------------*/
+/*
+bit 7 Unimplemented: Read as ‘0’
+ */
+/*
+bit 6 nDR_STATUS: Data Ready Status Flag
+1 = ADCDATA has not been updated since last reading or last Reset (default)
+0 = New ADCDATA ready for reading
+bit 5 nCRCCFG_STATUS: CRC Error Status Flag Bit for Internal Registers
+1 = CRC error has not occurred for the Configuration registers (default)
+0 = CRC error has occurred for the Configuration registers
+bit 4 bit 3-2 nPOR_STATUS: POR Status Flag
+1 = POR has not occurred since the last reading (default)
+0 = POR has occurred since the last reading
+ */
+#define MCP_IRQ_nDR_STATUS      (0x1<<6)
+#define MCP_IRQ_nCRCCFG_STATUS  (0x1<<5)
+#define MCP_IRQ_nPOR_STATUS     (0x1<<4)
+
+/*
+IRQ_MODE[1:0]: Configuration for the IRQ/MDAT Pin(1)
+IRQ_MODE[1]: IRQ/MDAT Selection
+1 = MDAT output is selected. Only POR and CRC interrupts can be present on this pin and take priority
+over the MDAT output
+bit 1 bit 0 Note 1: 0 = IRQ output is selected. All interrupts can appear on the IRQ/MDAT pin
+IRQ_MODE[0]: IRQ Pin Inactive State Selection
+1 = The Inactive state is logic high (does not require a pull-up resistor to DVDD)
+0 = The Inactive state is High-Z (requires a pull-up resistor to DVDD) (default)
+EN_FASTCMD: Enable Fast Commands in the COMMAND Byte
+1 = Fast commands are enabled (default)
+0 = Fast commands are disabled
+EN_STP: Enable Conversion Start Interrupt Output
+1 = Enabled (default)
+0 = Disabled
+ */
+#define MCP_IRQ_EN_STP      (0x1)
+#define MCP_IRQ_EN_FSTCMD   (0x1<<1)
+#define MCP_IRQ_IRQ_INACTIVE_HI_Z (0x0)
+#define MCP_IRQ_IRQ_INACTIVE_LOGIC_HI (0x1<<2)
+#define MCP_IRQ_IRQ_MDAT_MODE (0x1<<3)
+#define MCP_IRQ_IRQ_nIRQ_MODE (0x0)
+
 
 
 /*======================================*
@@ -454,9 +522,14 @@ typedef uint8_t mcp_status_t;
 //    uint8_t mux_mode_inputs[2];
 //} mcp_config_t;
 
+enum mcp_input_mode {MCP_SCAN_MODE, MCP_MUX_MODE};
+
 // Just the cfg0..2 registers which should be written.
 typedef struct mcp_cfg_t {
-    uint8_t cfg[4];
+    uint8_t cfgs[4];
+    uint8_t input_mode;
+    uint16_t scan_sel;
+    uint8_t mux_sel;
 } mcp_cfg_t;
 
 // TODO: write the config struct and functions.
@@ -467,6 +540,9 @@ typedef struct mcp_info_t {
     int mosi;
     int sck;
     int nirq;
+    uint mclk;
+    uint mclk_slice;
+    uint mclk_chan;
     mcp_cfg_t cfg;
 } mcp_info_t;
 
@@ -474,7 +550,7 @@ typedef struct mcp_info_t {
 
 
 
-mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin);
+mcp_status_t mcp_spi_init(mcp_info_t *s, spi_inst_t *spi, int mosi_pin, int miso_pin, int cs_pin, int sck_pin, int nirq_pin, int mclk_pin);
 
 
 // NOTE: This is currently written for the MCP346xR, **NOT** the MCP356xR which has a 24-bit adc output.
@@ -483,8 +559,14 @@ mcp_status_t mcp_single_conversion(mcp_info_t *s, uint16_t *dst);
 mcp_status_t mcp_mux_sel(mcp_info_t *s, mcp_mux_vals_t mux_p, mcp_mux_vals_t mux_n);
 
 mcp_status_t mcp_read_regs(mcp_info_t *s, uint8_t *dst, uint n, int reg_addr);
+
 mcp_status_t mcp_write_regs(mcp_info_t *s, uint8_t *vals, uint n, int reg_addr);
 
+mcp_status_t mcp_configure(mcp_info_t *s, mcp_cfg_t *cfg);
+
+void mcp_get_default_cfg(mcp_cfg_t *cfg);
+
+mcp_status_t mcp_mclk_init(mcp_info_t *s, uint32_t freq);
 
 // ============================================================
 // Add these declarations alongside the other mcp_* prototypes.
@@ -502,6 +584,6 @@ mcp_status_t mcp_scan_set_dly(mcp_info_t *s, uint32_t delay_dly);
 // 0 = no delay (default). Max = 0xFFFFFF.
 mcp_status_t mcp_timer_set(mcp_info_t *s, uint32_t timer_dmclk);
 
-mcp_status_t mcp_configure(mcp_info_t *s, uint8_t cfg0, uint8_t cfg1, uint8_t cfg2, uint8_t cfg3);
+
 
 #endif

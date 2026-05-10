@@ -7,7 +7,9 @@
 #include "pico/multicore.h"
 
 #include "ada4255_driver/ada4255.h"
-#include "../src2/ADPC_cfg.h"
+#include "../ADPC_Dev/ADPC_cfg.h"
+
+#define ADA_SLEEPTIME_US 5
 
 int main() {
     stdio_init_all();
@@ -19,28 +21,47 @@ int main() {
         rx[i] = 0;
     }
 
+    gpio_init(PGIA_PIN_CS);
+    gpio_put(PGIA_PIN_CS,ADA_CS_DESELECT);
+    gpio_set_dir(PGIA_PIN_CS,GPIO_OUT);
+
     // wait for user input.
     scanf(" %c",ui);
-    ada_spi_init(&ada, ADC_1_SPI, ADC_1_PIN_MOSI,ADC_1_PIN_MISO,ADC_1_PIN_CS,ADC_1_PIN_SCK);
 
+run:
     printf("provide a character to continue...\n");
     scanf(" %c",ui);
+
+    printf("initializing...\n");
+    ada_spi_init(&ada, ADC_1_SPI, PGIA_PIN_MOSI,PGIA_PIN_MISO,PGIA_PIN_CS,PGIA_PIN_SCK);
 
     // read all config regs.
-    printf("Reading Clock Sync Register.\n");
-    tx[0] = ADA_CMD_READ | ADA_ADDR_SYNC_CFG;
-    gpio_put(PGIA_PIN_CS,0); sleep_us(100);
-    spi_write_blocking(PGIA_SPI, tx, 1);
-    spi_read_blocking(PGIA_SPI,0,rx,1);
-    sleep_us(100); gpio_put(PGIA_PIN_CS,1);
-    printf("Read: 0x%02X\n",rx[0]);
+    printf("Reading Registers.\n");
+    tx[0] = ADA_CMD_READ | ADA_ADDR_PART_ID(0);
+    tx[1] = 0;
+    gpio_put(ada.cs_pin,0); sleep_us(ADA_SLEEPTIME_US);
+    spi_write_blocking(ada.spi, tx, 1);
+    spi_read_blocking(ada.spi,0,rx,5);
+    sleep_us(ADA_SLEEPTIME_US); gpio_put(ada.cs_pin,1);
+    for(int i = 0;i<5; i++) {
+        printf("Read: 0x%02X\n", rx[i]);
+    }
+
+    printf("Writing input mux.\n");
+    int result = ada_input_select(&ada,ADA_INPUT_2);
+    printf("%s", (result==0) ? "Success.\n" : "Input Mux Write Failure.\n");
+
+    printf("Writing gain mux.\n");
+    result = ada_input_gain_select(&ada,ADA_INPUT_GAIN_32);
+    printf("%s", (result==0) ? "Success.\n" : "Input Mux Write Failure.\n");
 
     printf("provide a character to continue...\n");
     scanf(" %c",ui);
+
 
     printf("Done. Enter 'q' to exit. Enter any other character to re-read.\n");
     scanf(" %c",ui);
-    //if(ui[0]!='q') goto sample;
+    if(ui[0]!='q') goto run;
 
 reboot:
     printf("\n\nREBOOT!\n");
