@@ -165,10 +165,6 @@ app_result_t app_cmd_rstream(app_state_t *s) {
 }
 
 app_result_t app_cmd_isp(app_state_t *s, float sp) {
-    if(sp > 100 || sp < -10) {
-        if (!s->is_streaming) printf("Current setpoint out of range.\n");
-        return APP_INVALID_ARG;
-    }
     int32_t sp_scaled = sp * 162.4203245 - -25.41180842;
 
     s->current_setpoint = sp;
