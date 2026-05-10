@@ -40,6 +40,11 @@ void dma_irq_handler_0(void);
 app_result_t adpc_init();
 
 app_result_t app_cmd_rstream(app_state_t *s);
+app_result_t app_cmd_isp(app_state_t *s, float sp);
+app_result_t app_cmd_ictl(app_state_t *s);
+app_result_t app_cmd_irun(app_state_t *s);
+app_result_t app_cmd_irun_streaming(app_state_t *s);
+
 
 
 #endif

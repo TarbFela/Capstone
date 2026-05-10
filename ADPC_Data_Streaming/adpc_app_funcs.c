@@ -22,6 +22,7 @@
 #include "../ADPC_Dev/ADPC_cfg.h"
 #include "../ADPC_Dev/ADPC_ADC.h"
 #include "../ADPC_Dev/adpc_gpio_pwm.h"
+#include "adpc_core1.h"
 
 #include "adpc_app.h"
 
@@ -73,7 +74,7 @@ app_result_t adpc_init() {
 
     printf("Initializing ADPC PGIA\n");
     ada_spi_init(&ada, PGIA_SPI, PGIA_PIN_MOSI, PGIA_PIN_MISO ,PGIA_PIN_CS, PGIA_PIN_SCK);
-    int ada_status = ada_input_select(&ada, ADA_INPUT_2);
+    int ada_status = ada_input_select(&ada, ADA_INPUT_1);
     if(ada_status) {
         printf("PGIA INITIALIZATION FAILED!\nError Code: %d\n",ada_status);
         return ada_status;
@@ -114,7 +115,6 @@ app_result_t app_cmd_rstream(app_state_t *s) {
     sleep_ms(100);
     // Mute stdio over USB
     stdio_set_driver_enabled(&stdio_usb, false);
-
     int dma0_last_printed = dma0_last_written;
     int dma1_last_printed = dma1_last_written;
     int ui_exit_signal = 0;
@@ -161,5 +161,65 @@ app_result_t app_cmd_rstream(app_state_t *s) {
     printf("\nEND RAW DATA STREAM\n");
     printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
     s->is_streaming = false;
+    return APP_OK;
+}
+
+app_result_t app_cmd_isp(app_state_t *s, float sp) {
+    if(sp > 100 || sp < -10) {
+        if (!s->is_streaming) printf("Current setpoint out of range.\n");
+        return APP_INVALID_ARG;
+    }
+    int32_t sp_scaled = sp * 162.4203245 - -25.41180842;
+
+    s->current_setpoint = sp;
+    if (!s->is_streaming) printf("[set ictl setpoint to %4.2f amps]\n", (float)sp_scaled * 0.006156071217 + 0.1572961424);
+
+    return APP_OK;
+}
+
+app_result_t app_cmd_ictl(app_state_t *s) {
+    if(s->cl_ictl) {
+        multicore_fifo_push_timeout_us(MC_FIFO_STOP_FLAG, 100);
+        if(!s->is_streaming) printf("Core 1 pushed...\n");
+        multicore_fifo_pop_blocking();
+        sleep_ms(100);
+        multicore_reset_core1();
+        return APP_OK;
+    }
+    else {
+        if(!s->is_streaming) printf("Launching Core 1\n");
+        multicore_launch_core1(core1_ictl);
+        return APP_OK;
+    }
+}
+
+app_result_t app_cmd_irun(app_state_t *s) {
+    // start CL control if it isn't yet running
+    if(!ui_state.cl_ictl) {
+        if(app_cmd_ictl(s) != APP_OK) return APP_ERROR;
+    }
+    uint64_t ts = (int)(s->current_program.timestep * 1000);
+    uint64_t t = time_us_64();
+    bool ui_break = false;
+    for( int i = 0; i < s->current_program.N; i++) {
+        while(time_us_64() - t <= ts) {
+            if(stdio_getchar_timeout_us(10) != PICO_ERROR_TIMEOUT) {
+                ui_break = true;
+                break;
+            }
+        }
+        t += ts;
+        if(ui_break) break;
+        if(app_cmd_isp(s, s->current_program.setpoints[i]) != APP_OK) break;
+    }
+    //stop CL control
+    app_cmd_ictl(s);
+    //turn off outputs
+    mphb_set_ph_en(HB1B,false);
+    mphb_set_ph_en(HB2B,false);
+    mphb_set_ph_en(HB3B,false);
+}
+
+app_result_t app_cmd_irun_streaming(app_state_t *s) {
     return APP_OK;
 }

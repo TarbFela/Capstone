@@ -48,16 +48,7 @@ app_result_t app_dispatch(app_state_t *s) {
         if(!s->is_streaming) printf("[set level to %d]\n",level);
     }
     if(strncmp(s->ui, "isp ",4) == 0) {
-        if(!s->cl_ictl) return APP_INVALID_ARG;
-        float sp = atof(s->ui + 4);
-        int32_t sp_scaled = sp * 162.4203245 - -25.41180842;
-        if(multicore_fifo_push_timeout_us(sp_scaled,100)) {
-            if(multicore_fifo_pop_timeout_us(100, &sp_scaled)) {
-                if (!s->is_streaming) printf("[set ictl setpoint to %4.2f amps]\n", (float)sp_scaled * 0.006156071217 + 0.1572961424);
-                return APP_OK;
-            }
-        }
-        return APP_TIMEOUT;
+        app_cmd_isp(s,  atof(s->ui + 4));
     }
     if(strncmp(ui,"phen",4) == 0) {
         mphb_set_ph_en(HB1B, true);
@@ -121,17 +112,62 @@ app_result_t app_dispatch(app_state_t *s) {
         return APP_OK;
     }
     if(strncmp(ui,"ictl",4) == 0) {
-        if(s->cl_ictl) {
-            multicore_fifo_push_timeout_us(MC_FIFO_STOP_FLAG, 100);
-            printf("Core 1 pushed...\n");
-            multicore_fifo_pop_blocking();
-            sleep_ms(100);
-            multicore_reset_core1();
+        app_cmd_ictl(s);
+    }
+    if(strncmp(ui,"iprog",5) == 0) {
+        // TODO: DANGEROUS. Length of UI can exceed iprog_ui's size.
+        printf("\t+--------------------+\n"
+               "\t| Current Programmer |\n"
+               "\t+--------------------+\n"
+               "This tool allows sequences of current setpoints\n"
+               "to be iterated through. Please provide a time-step\n"
+               "in milliseconds and then a series of setpoints in\n"
+               "amps (decimal values are ok). Terminate the new\n"
+               "current program with \"END\".\n"
+               "\n\n"
+               "A maximum of %d setpoints may be set. Invalid data\n"
+               "entry will be recorded as zeroes.\n", ICTL_PROG_MAX_SIZE);
+        char iprog_ui[64];
+        float timestep = 0;
+        while(timestep == 0) {
+            printf("\n\tTimestep (ms): ");
+            scanf(" %s",iprog_ui);
+            timestep = atof(iprog_ui);
+            if(timestep == 0) printf("Invalid Input.\n");
         }
-        else {
-            printf("Launching Core 1\n");
-            multicore_launch_core1(core1_ictl);
+        s->current_program.timestep = timestep;
+        printf("\nTimestep set to %.1f ms.\n",timestep);
+        s->current_program.N = 0;
+        while(1) {
+            printf("\nEnter setpoint #%d: ",s->current_program.N+1);
+            scanf("%s",iprog_ui);
+            if(strncmp(iprog_ui,"END",3)==0) break;
+            float setpoint = atof(iprog_ui);
+            s->current_program.setpoints[s->current_program.N] = setpoint;
+            s->current_program.N++;
+            if(s->current_program.N == ICTL_PROG_MAX_SIZE) break;
         }
+        printf("Setpoint programming complete. Program:\n");
+        for(int i = 0; i<s->current_program.N; i++) printf("[%d]\t%.2f\n",i,s->current_program.setpoints[i]);
+        printf("Programed stored. Use \"irun\" to run this program.\n");
+        return APP_OK;
+    }
+    if(strncmp(ui,"irun",4) == 0) {
+        printf("\t+--------------------+\n"
+               "\t|   Program Runner   |\n"
+               "\t+--------------------+\n"
+               "Use argument \"stream\" to stream ADC data\n"
+               "during the execution of the current program.\n");
+        if(s->current_program.N == 0) {
+            printf("No program loaded. \nPlease use \"iprog\" to load a program.\n");
+            return APP_OK;
+        }
+        printf("Press any key to cancel the program.\n");
+        printf("Starting the program...\n");
+        if(strncmp(ui+5,"stream",6) == 0) {
+            return app_cmd_irun_streaming(s);
+        }
+        return app_cmd_irun(s);
 
     }
 
@@ -171,7 +207,7 @@ app_result_t app_dispatch_single_char(app_state_t *s, char ui) {
 
 
 // Get user input strings that are newline-terminated
-// Has a built-in 1ms getchar() timeout so it shares time.
+// Has a built-in getchar() timeout so it shares time.
 app_result_t app_shell_task(app_state_t *s) {
     if(s->is_streaming) return APP_ERROR;
     // check if we're on a new line; dispatch should reset the cursor!
