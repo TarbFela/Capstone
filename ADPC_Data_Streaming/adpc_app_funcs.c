@@ -195,6 +195,7 @@ app_result_t app_cmd_ictl(app_state_t *s) {
 
 app_result_t app_cmd_irun(app_state_t *s) {
     // start CL control if it isn't yet running
+    mphb_set_ph_en_all(true);
     if(!ui_state.cl_ictl) {
         if(app_cmd_ictl(s) != APP_OK) return APP_ERROR;
     }
@@ -215,13 +216,12 @@ app_result_t app_cmd_irun(app_state_t *s) {
     //stop CL control
     app_cmd_ictl(s);
     //turn off outputs
-    mphb_set_ph_en(HB1B,false);
-    mphb_set_ph_en(HB2B,false);
-    mphb_set_ph_en(HB3B,false);
+    mphb_set_ph_en_all(false);
     return APP_OK;
 }
 
 app_result_t app_cmd_irun_streaming(app_state_t *s) {
+    mphb_set_ph_en_all(true);
     // start CL control if it isn't yet running
     if(!ui_state.cl_ictl) {
         if(app_cmd_ictl(s) != APP_OK) return APP_ERROR;
