@@ -41,6 +41,8 @@ extern volatile uint32_t mphb_pwm_cm_level;
 
 typedef enum {HB1A, HB2A, HB3A, HB1B, HB2B, HB3B} mphb_port_t;
 
+extern const char *mphb_port_names[];
+
 // initialize gpio pins, pwm channels, and populate the info struct.
 void mphb_gpio_init(mphb_port_t i);
 
@@ -61,5 +63,7 @@ void mphb_set_pwm_en_all(bool enable);
 void mphb_setup_multiphase_masked(uint32_t phases_mask);
 
 void mphb_set_dlevel_all_spatial_dithering(float d);
+
+bool mphb_detect_connection(mphb_port_t i);
 
 #endif

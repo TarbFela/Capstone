@@ -99,10 +99,15 @@ app_result_t adpc_init() {
     printf("ADC PIOs initialized.\n");
 
     printf("Initializing MPHB connection(s)\n");
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        mphb_gpio_init(i);
+//        printf("\tMPHB %s CONNECTION: %s\n",mphb_port_names[i], mphb_detect_connection(i) ? "CONNECTED" : "NO CONNECTION");
+    }
+    mphb_gpio_init(HB3A);
     mphb_gpio_init(HB1B);
     mphb_gpio_init(HB2B);
     mphb_gpio_init(HB3B);
-    mphb_setup_multiphase_masked((1U<<HB1B) | (1U<<HB2B) | (1U<<HB3B));
+    mphb_setup_multiphase_masked((1U<<HB3A) | (1U<<HB1B) | (1U<<HB2B) | (1U<<HB3B));
 
     printf("initialized!\n");
     return APP_OK;

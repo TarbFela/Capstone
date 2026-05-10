@@ -33,8 +33,6 @@ typedef struct {
 
 extern volatile ictl_info_t ictlInfo;
 
-int ictl_level_bounds_check(float val) {
-    return (val>ictlInfo.level_high_bound) || (val < ictlInfo.level_low_bound);
-}
+int ictl_level_bounds_check(float val);
 
 #endif

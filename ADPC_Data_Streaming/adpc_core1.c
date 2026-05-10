@@ -25,6 +25,10 @@ volatile ictl_info_t ictlInfo = {
         .level_high_bound = 0.3
 };
 
+int ictl_level_bounds_check(float val) {
+return (val>ictlInfo.level_high_bound) || (val < ictlInfo.level_low_bound);
+}
+
 void core1_ictl(void) {
     gpio_init(ADPC_PIN_LED);
     gpio_set_dir(ADPC_PIN_LED, GPIO_OUT);
