@@ -8,9 +8,15 @@
 #include <stdio.h>
 
 mcp_info_t mcp_0;
-mcp_pio_t mpio_0;
+mcp_pio_t mpio_0 = {
+        .initialized = false,
+        .running = false
+};
 mcp_info_t mcp_1;
-mcp_pio_t mpio_1;
+mcp_pio_t mpio_1 = {
+        .initialized = false,
+        .running = false
+};
 
 enum adpc_adc_status_code {GOOD = 0, NO_POWER = -1, CONFIG_FAILED = -2};
 
@@ -68,6 +74,9 @@ int adpc_adc_init(void (*dma_handler_1)(void), void (*dma_handler_0)(void)) {
 // TODO: check communication somehow.
 // Starts an ADC, PIO, and DMA
 int adpc_adc_start(mcp_pio_t *s) {
+    if(s->running) {
+        return GOOD;
+    }
     // write ADC mode
     uint8_t tx[5], rx[5];
     tx[0] = s->mcp_info->cfg.cfgs[0] | MCP_CFG0_ADC_MODE_CONV;
@@ -82,6 +91,7 @@ int adpc_adc_start(mcp_pio_t *s) {
     spi_write_read_blocking(s->mcp_info->spi, tx, rx, 5);
 
     mcp_pio_start(s);
+    s->running = true;
     return GOOD;
 }
 

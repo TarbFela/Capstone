@@ -131,9 +131,23 @@ void mphb_set_ph_en(mphb_port_t i, bool enable) {
     mphb2_arr[i]->ph_en = enable;
 }
 
+// sets the enable for all **initialized** items.
+void mphb_set_ph_en_all(bool enable) {
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(mphb2_arr[i]->initialized) mphb_set_ph_en(i,enable);
+    }
+}
+
 void mphb_set_pwm_en(mphb_port_t i, bool enable) {
     pwm_set_enabled(mphb2_arr[i]->slice, enable);
     mphb2_arr[i]->pwm_en = enable;
+}
+
+// sets the enable for all **initialized** items.
+void mphb_set_pwm_en_all(bool enable) {
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(mphb2_arr[i]->initialized) mphb_set_pwm_en(i,enable);
+    }
 }
 
 

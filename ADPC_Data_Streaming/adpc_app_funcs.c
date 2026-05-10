@@ -85,7 +85,7 @@ app_result_t adpc_init() {
         return ada_status;
     }
 
-    sleep_ms(1000); // idk if its necessary...
+    sleep_ms(109); // idk if its necessary...
 
     printf("Starting ADC PIOs...\n");
     if(adpc_adc_start(&mpio_0) != 0) {
@@ -218,8 +218,67 @@ app_result_t app_cmd_irun(app_state_t *s) {
     mphb_set_ph_en(HB1B,false);
     mphb_set_ph_en(HB2B,false);
     mphb_set_ph_en(HB3B,false);
+    return APP_OK;
 }
 
 app_result_t app_cmd_irun_streaming(app_state_t *s) {
+    // start CL control if it isn't yet running
+    if(!ui_state.cl_ictl) {
+        if(app_cmd_ictl(s) != APP_OK) return APP_ERROR;
+    }
+
+    s->is_streaming = true;
+    printf("STREAMING RAW DATA:\n");
+    sleep_ms(100);
+    // Mute stdio over USB
+    stdio_set_driver_enabled(&stdio_usb, false);
+    int dma0_last_printed = dma0_last_written;
+    int dma1_last_printed = dma1_last_written;
+    uint bsent = 0, pii = 0;
+
+    uint64_t ts = (int)(s->current_program.timestep * 1000);
+    uint64_t t = time_us_64();
+    bool ui_break = false;
+    for( int i = 0; i < s->current_program.N; i++) {
+        while(time_us_64() - t <= ts) {
+            if(stdio_getchar_timeout_us(10) != PICO_ERROR_TIMEOUT) {
+                ui_break = true;
+                break;
+            }
+            if(dma0_last_written != dma0_last_printed || dma1_last_written != dma1_last_printed) {
+                if (dma0_last_written != dma0_last_printed) {
+                    // Blast raw data
+                    bsent += tud_cdc_write(mpio_0.buff + (dma0_last_written - 1) * DMA_BUFF_SIZE,
+                                           DMA_BUFF_SIZE * sizeof(uint32_t));
+                    tud_cdc_write_flush();
+                    while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+                    dma0_last_printed = dma0_last_written;
+                }
+                if (dma1_last_written != dma1_last_printed) {
+                    // Blast raw data
+                    bsent += tud_cdc_write(mpio_1.buff + (dma1_last_written - 1) * DMA_BUFF_SIZE,
+                                           DMA_BUFF_SIZE * sizeof(uint32_t));
+                    tud_cdc_write_flush();
+                    while (tud_cdc_write_available() < CFG_TUD_CDC_TX_BUFSIZE) tud_task();
+                    dma1_last_printed = dma1_last_written;
+                }
+                pii++;
+            }
+        }
+        t += ts;
+        if(ui_break) break;
+        if(app_cmd_isp(s, s->current_program.setpoints[i]) != APP_OK) break;
+    }
+    // Restore stdio
+    stdio_set_driver_enabled(&stdio_usb, true);
+    sleep_ms(100);
+    printf("\nEND RAW DATA STREAM\n");
+    printf("Streamed %d batches. Wrote %d bytes.\n",pii, bsent);
+    s->is_streaming = false;
+
+    //stop CL control
+    app_cmd_ictl(s);
+    //turn off outputs
+    mphb_set_ph_en_all(false);
     return APP_OK;
 }

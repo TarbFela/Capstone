@@ -18,13 +18,14 @@
 
 
 volatile app_state_t ui_state = {
-        .level = 0,
         .ui_cursor = 0,
+        .level = 0,
+        .initialized = false,
         .is_streaming = false,
         .pwm_enabled = false,
         .ph_enabled = false,
         .cl_ictl = false,
-        .ui = {1,0}
+        .ui = {1,0},
 };
 
 
@@ -34,7 +35,7 @@ app_result_t app_dispatch(app_state_t *s) {
     char *ui = s->ui;
 
     if (s->ui[0] == 'q') return APP_REBOOT;
-    if(strncmp(s->ui, "init",4) == 0) {
+    if(strncmp(ui, "init",4) == 0) {
         if(inited) {
             if(!s->is_streaming) printf("Already initialized. Restart to initialize again!\n");
             return APP_OK;
@@ -42,10 +43,16 @@ app_result_t app_dispatch(app_state_t *s) {
         inited = true;
         return adpc_init();
     }
-    if(strncmp(s->ui, "level  ",6) == 0) {
-        int level = atoi(s->ui + 6);
+    if(strncmp(ui, "level",5) == 0) {
+        if(ui[5] == 0xD) {
+            if(!s->is_streaming) printf("Level is %d\n",s->level);
+            return APP_OK;
+        }
+        int level = atoi(ui + 6);
         mphb_set_dlevel_all(level);
+        s->level = level;
         if(!s->is_streaming) printf("[set level to %d]\n",level);
+        return APP_OK;
     }
     if(strncmp(s->ui, "isp ",4) == 0) {
         app_cmd_isp(s,  atof(s->ui + 4));
@@ -74,6 +81,7 @@ app_result_t app_dispatch(app_state_t *s) {
     }
     if(strncmp(ui,"start",5) == 0) {
         if(adpc_init() != APP_OK) return APP_ERROR;
+        s->initialized = true;
         mphb_set_pwm_en(HB1B, true);
         mphb_set_pwm_en(HB2B, true);
         mphb_set_pwm_en(HB3B, true);

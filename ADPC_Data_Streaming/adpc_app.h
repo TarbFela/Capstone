@@ -23,6 +23,7 @@ typedef struct {
     char ui_cursor;
     int level;
     float current_setpoint;
+    bool initialized;
     bool is_streaming;
     bool pwm_enabled;
     bool ph_enabled;

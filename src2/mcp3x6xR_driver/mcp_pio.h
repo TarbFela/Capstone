@@ -14,6 +14,8 @@ extern volatile uint32_t dma_buff_adc_0[DMA_BUFF_SIZE * 2];
 extern volatile uint32_t dma_buff_adc_1[DMA_BUFF_SIZE * 2];
 
 typedef struct mcp_pio_t {
+    bool initialized;
+    bool running;
     PIO pio;
     uint sm;
     mcp_info_t *mcp_info;

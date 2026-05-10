@@ -54,6 +54,9 @@ void mphb_set_dlevel_all(int dlevel);
 void mphb_set_ph_en(mphb_port_t i, bool enable);
 void mphb_set_pwm_en(mphb_port_t i, bool enable);
 
+void mphb_set_ph_en_all(bool enable);
+void mphb_set_pwm_en_all(bool enable);
+
 void mphb_setup_multiphase_masked(uint32_t phases_mask);
 
 #endif
