@@ -99,6 +99,7 @@ app_result_t app_dispatch(app_state_t *s) {
     }
     if(strncmp(ui,"r0 ",3) == 0) {
         uint n = (uint)atoi(ui + 3);
+        if(n > DMA_BUFF_SIZE) return APP_INVALID_ARG;
         if(n==0) return APP_INVALID_ARG;
         printf("DMA last written %n values:\n");
         int32_t *buff = (int32_t *)mpio_0.buff + (dma0_last_written - 1) * DMA_BUFF_SIZE;
@@ -109,6 +110,7 @@ app_result_t app_dispatch(app_state_t *s) {
     }
     if(strncmp(ui,"r1 ",3) == 0) {
         uint n = (uint)atoi(ui + 3);
+        if(n > DMA_BUFF_SIZE) return APP_INVALID_ARG;
         if(n==0) return APP_INVALID_ARG;
         printf("DMA last written %n values:\n");
         uint32_t *buff = mpio_1.buff + (dma1_last_written - 1) * DMA_BUFF_SIZE;
