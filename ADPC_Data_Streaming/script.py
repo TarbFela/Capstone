@@ -48,7 +48,7 @@ def decode_word(word: int):
     """(chid, signed_value) from a 32-bit MCP word (CHID[3:0] + SGN[3:0] + DATA[23:0])."""
     return (word >> 28) & 0xF, sign_extend_24(word & 0xFFFFFF)
 
-def parse_and_save(raw: bytes):
+def parse_and_save(raw: bytes, time_start: str, time_stop: str):
     """Decode a raw uint32 stream and write a timestamped CSV log file."""
     n_words  = len(raw) // BYTES_PER_WORD
     leftover = len(raw) % BYTES_PER_WORD
@@ -66,11 +66,13 @@ def parse_and_save(raw: bytes):
         data.setdefault(str(ch), []).append(val)
 
     os.makedirs("logs", exist_ok=True)
-    fname = "log [" + time.strftime("%Y-%m-%d-%H-%M-%S") + "].txt"
+    fname = "log [" + time_start.replace(":", "-") + "].txt"
     fpath = os.path.join("logs", fname)
     keys  = list(data.keys())
     n     = max(len(v) for v in data.values())
     with open(fpath, "x") as f:
+        f.write(f"# time_start: {time_start}\n")
+        f.write(f"# time_stop:  {time_stop}\n")
         f.write(", ".join(f"CH {k}" for k in keys) + "\n")
         for i in range(n):
             f.write(", ".join(str(data[k][i]) if i < len(data[k]) else "" for k in keys) + "\n")
@@ -293,9 +295,11 @@ def shell_loop(port: serial.Serial):
             except TimeoutError:
                 print("  Timed out waiting for stream start.")
                 continue
+            time_start = time.strftime("%Y-%m-%d %H:%M:%S")
             raw = collect_user_stop(port)
+            time_stop  = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"  Received {len(raw)} raw bytes.")
-            parse_and_save(raw)
+            parse_and_save(raw, time_start, time_stop)
             drain(port, quiet_s=0.5)
             continue
 
@@ -309,9 +313,11 @@ def shell_loop(port: serial.Serial):
             except TimeoutError:
                 print("  Timed out waiting for stream start.")
                 continue
+            time_start = time.strftime("%Y-%m-%d %H:%M:%S")
             raw = collect_auto(port)
+            time_stop  = time.strftime("%Y-%m-%d %H:%M:%S")
             print(f"  Received {len(raw)} raw bytes.")
-            parse_and_save(raw)
+            parse_and_save(raw, time_start, time_stop)
             drain(port, quiet_s=0.5)
             continue
 
