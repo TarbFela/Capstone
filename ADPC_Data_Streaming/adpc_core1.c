@@ -19,6 +19,10 @@ volatile ictl_info_t ictlInfo = {
         .accum = 0,
         .i_coeff = 0.25,
         .p_coeff = 0.75,
+        .accum_low_bound = -50000,
+        .accum_high_bound = 50000,
+        .level_low_bound = -0.3,
+        .level_high_bound = 0.3
 };
 
 void core1_ictl(void) {
@@ -76,8 +80,8 @@ start:
         float err = (avg - ictl_sp);
         float incr = err * ictlInfo.i_coeff;
         ictlInfo.accum += incr;
-        if (ictlInfo.accum < -50000) ictlInfo.accum = -50000;
-        if (ictlInfo.accum > 5000) ictlInfo.accum = 5000;
+        if (ictlInfo.accum < ictlInfo.accum_low_bound) ictlInfo.accum = ictlInfo.accum_low_bound;
+        if (ictlInfo.accum > ictlInfo.accum_high_bound) ictlInfo.accum = ictlInfo.accum_high_bound;
 
         float level = (ictlInfo.accum + ictlInfo.p_coeff * err) / 100000;
         if(level > 0.3) level = 0.3;

@@ -46,7 +46,9 @@ def sign_extend_24(v: int) -> int:
 
 def decode_word(word: int):
     """(chid, signed_value) from a 32-bit MCP word (CHID[3:0] + SGN[3:0] + DATA[23:0])."""
-    return (word >> 28) & 0xF, sign_extend_24(word & 0xFFFFFF)
+    chid = (word >> 28) & 0xF
+    if chid == 15: chid = 0
+    return chid, sign_extend_24(word & 0xFFFFFF)
 
 def parse_and_save(raw: bytes, time_start: str, time_stop: str):
     """Decode a raw uint32 stream and write a timestamped CSV log file."""
@@ -356,7 +358,7 @@ def main():
 
         # Handshake — firmware waits for any single character before starting
         print("Sending handshake...")
-        port.write(b"c")
+        port.write(b"c\n")
         port.flush()
         time.sleep(0.3)
         port.reset_input_buffer()

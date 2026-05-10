@@ -66,8 +66,8 @@ int adpc_adc_init(void (*dma_handler_1)(void), void (*dma_handler_0)(void)) {
 
 
 
-    mcp_mclk_init(&mcp_0, 10000000);
-    mcp_mclk_init(&mcp_1, 10000000);
+    mcp_mclk_init(&mcp_0, 15000000);
+    mcp_mclk_init(&mcp_1, 15000000);
     return GOOD;
 }
 

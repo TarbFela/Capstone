@@ -45,10 +45,14 @@ app_result_t app_dispatch(app_state_t *s) {
     }
     if(strncmp(ui, "level",5) == 0) {
         if(ui[5] == 0xD) {
-            if(!s->is_streaming) printf("Level is %d\n",(int)s->level);
+            if(!s->is_streaming) printf("Level is %.1f\n",s->level);
             return APP_OK;
         }
         int level = atoi(ui + 6);
+        if(ictl_level_bounds_check(level)) {
+            if(!s->is_streaming) printf("Level is out of bounds!\n");
+            return APP_INVALID_ARG;
+        }
         mphb_set_dlevel_all(level);
         s->level = level;
         if(!s->is_streaming) printf("[set level to %d]\n",level);
@@ -204,32 +208,32 @@ app_result_t app_dispatch(app_state_t *s) {
 }
 
 app_result_t app_dispatch_single_char(app_state_t *s, char ui) {
-    if(ui == 'e') {
-        mphb_set_ph_en(HB1B, true);
-        mphb_set_ph_en(HB2B, true);
-        mphb_set_ph_en(HB3B, true);
-        return APP_OK;
-//                            printf("ENABLE PIN ON\n");
-    }
-    if(ui == 'd') {
-        mphb_set_ph_en(HB1B, false);
-        mphb_set_ph_en(HB2B, false);
-        mphb_set_ph_en(HB3B, false);
-        return APP_OK;
-//                            printf("ENABLE PIN OFF\n");
-    }
-    else if ((ui >= '0') && (ui <= '9')) {
-        s->level = (ui-'0')*5;
-//                            printf("%d offset\n",level);
-        mphb_set_dlevel_all( s->level);
-        return APP_OK;
-    }
-    else if (ui == 'p' || ui == 'l') {
-        s->level += (ui == 'p') ? 1 : -1;
-//                            printf("%d offset\n",level);
-        mphb_set_dlevel_all( s->level);
-        return APP_OK;
-    }
+//    if(ui == 'e') {
+//        mphb_set_ph_en(HB1B, true);
+//        mphb_set_ph_en(HB2B, true);
+//        mphb_set_ph_en(HB3B, true);
+//        return APP_OK;
+////                            printf("ENABLE PIN ON\n");
+//    }
+//    if(ui == 'd') {
+//        mphb_set_ph_en(HB1B, false);
+//        mphb_set_ph_en(HB2B, false);
+//        mphb_set_ph_en(HB3B, false);
+//        return APP_OK;
+////                            printf("ENABLE PIN OFF\n");
+//    }
+//    else if ((ui >= '0') && (ui <= '9')) {
+//        s->level = (ui-'0') * ;
+////                            printf("%d offset\n",level);
+//        mphb_set_dlevel_all( s->level * MPHB_PWM_WRAP);
+//        return APP_OK;
+//    }
+//    else if (ui == 'p' || ui == 'l') {
+//        s->level += (ui == 'p') ? 1 : -1;
+////                            printf("%d offset\n",level);
+//        mphb_set_dlevel_all( s->level);
+//        return APP_OK;
+//    }
     return APP_STOP_STREAM;
 }
 
@@ -237,10 +241,10 @@ app_result_t app_dispatch_single_char(app_state_t *s, char ui) {
 // Get user input strings that are newline-terminated
 // Has a built-in getchar() timeout so it shares time.
 app_result_t app_shell_task(app_state_t *s) {
-    if(s->is_streaming) return APP_ERROR;
+    //if(s->is_streaming) return APP_ERROR;
     // check if we're on a new line; dispatch should reset the cursor!
     if(s->ui_cursor == 0 && s->ui[0] != 0) {
-        printf(">> ");
+        if(!s->is_streaming) printf(">> ");
         s->ui[0] = 0;
     }
     int uic = getchar_timeout_us(1000);
@@ -256,7 +260,7 @@ app_result_t app_shell_task(app_state_t *s) {
         return APP_RUNNING;
     }
     // echo
-    putchar((char)uic);
+    if(!s->is_streaming) putchar((char)uic);
 
     // populate ui
     if((char)uic == '\n') {

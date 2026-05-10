@@ -25,8 +25,16 @@ typedef struct {
     float accum;
     float i_coeff; // PI control
     float p_coeff;
+    float accum_low_bound;
+    float accum_high_bound;
+    float level_low_bound;
+    float level_high_bound;
 } ictl_info_t;
 
 extern volatile ictl_info_t ictlInfo;
+
+int ictl_level_bounds_check(float val) {
+    return (val>ictlInfo.level_high_bound) || (val < ictlInfo.level_low_bound);
+}
 
 #endif
