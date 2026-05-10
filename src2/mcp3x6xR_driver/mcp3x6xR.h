@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "hardware/spi.h"
 
+// sign-extend in place
 #define sign_extend_24_to_32(x) __asm__("sbfx %0, %0, #0, #24" : "+r"(x))
 
 
