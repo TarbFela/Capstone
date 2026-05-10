@@ -5,6 +5,7 @@
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
 
+
 /*
  *  The SW interface for the MPHB-002 boards allows the ph_en and PWM (A & C or B & D) pins to be driven.
  *  Provided are already-instantiated structs (e.g. hb_1A) corresponding to the connectors (labelled on the PCB)
@@ -58,5 +59,7 @@ void mphb_set_ph_en_all(bool enable);
 void mphb_set_pwm_en_all(bool enable);
 
 void mphb_setup_multiphase_masked(uint32_t phases_mask);
+
+void mphb_set_dlevel_all_spatial_dithering(float d);
 
 #endif

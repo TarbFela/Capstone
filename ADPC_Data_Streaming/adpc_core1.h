@@ -21,4 +21,12 @@
 
 void core1_ictl(void);
 
+typedef struct {
+    float accum;
+    float i_coeff; // PI control
+    float p_coeff;
+} ictl_info_t;
+
+extern volatile ictl_info_t ictlInfo;
+
 #endif

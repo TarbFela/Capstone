@@ -45,7 +45,7 @@ app_result_t app_dispatch(app_state_t *s) {
     }
     if(strncmp(ui, "level",5) == 0) {
         if(ui[5] == 0xD) {
-            if(!s->is_streaming) printf("Level is %d\n",s->level);
+            if(!s->is_streaming) printf("Level is %d\n",(int)s->level);
             return APP_OK;
         }
         int level = atoi(ui + 6);
@@ -127,6 +127,16 @@ app_result_t app_dispatch(app_state_t *s) {
     if(strncmp(ui,"ictl",4) == 0) {
         app_cmd_ictl(s);
     }
+    if(strncmp(ui,"coeff i ",8)==0) {
+        float val = atof(ui+8);
+        ictlInfo.i_coeff = val;
+        printf("[Set ictl I coeff to %.5f]\n",ictlInfo.i_coeff);
+    }
+    if(strncmp(ui,"coeff p ",8)==0) {
+        float val = atof(ui+8);
+        ictlInfo.p_coeff = val;
+        printf("[Set ictl P coeff to %.5f]\n",ictlInfo.p_coeff);
+    }
     if(strncmp(ui,"iprog",5) == 0) {
         // TODO: DANGEROUS. Length of UI can exceed iprog_ui's size.
         printf("\t+--------------------+\n"
@@ -182,6 +192,11 @@ app_result_t app_dispatch(app_state_t *s) {
         }
         return app_cmd_irun(s);
 
+    }
+    if(strncmp(ui,"sdith",5) == 0) {
+        float val = atof(ui+5);
+        mphb_set_dlevel_all_spatial_dithering(val);
+        return APP_OK;
     }
 
     printf("%s\n",ui);

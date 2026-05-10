@@ -15,6 +15,12 @@
 
 #include "adpc_app_funcs.h"
 
+volatile ictl_info_t ictlInfo = {
+        .accum = 0,
+        .i_coeff = 0.25,
+        .p_coeff = 0.75,
+};
+
 void core1_ictl(void) {
     gpio_init(ADPC_PIN_LED);
     gpio_set_dir(ADPC_PIN_LED, GPIO_OUT);
@@ -41,7 +47,8 @@ void core1_ictl(void) {
 //        }
 //    }
 
-    int ictl_sp = ui_state.current_setpoint * 162.4203245 - -25.41180842;
+    // this converts from units of AMPS to PWM LEVEL (out of 1000 or MPHB_PWM_WRAP)
+    float ictl_sp = ui_state.current_setpoint * 162.4203245 - -25.41180842;
     int lw_current;
 start:
     lw_current = dma0_last_written;
@@ -57,7 +64,7 @@ start:
         int *base = (int *)(mpio_0.buff);
         int *val = (int *)(mpio_0.buff + DMA_BUFF_SIZE*(2-lw_current) + (DMA_BUFF_SIZE - dma_channel_hw_addr(dma_ch_writing)->transfer_count - 1));
         uint32_t offset = (uint32_t)(val-base);
-        int avg = 0;
+        float avg = 0;
         for(int i =0; i<5; i++) {
             if((int32_t)(offset) - i > 0) avg += *(int *)(base+offset - i);
             else avg += *base; // not ideal; doesn't actually wrap the buffer. Whatever.
@@ -66,22 +73,22 @@ start:
 
         ictl_sp = ui_state.current_setpoint * 162.4203245 - -25.41180842;
 
-        int err = (avg - ictl_sp);
-        int incr = 0;
-        if(err > 50) incr = 1;
-        if(err < -50) incr = -1;
-        if(err > 200) incr += 1;
-        if(err < -200) incr += -1;
-        // slower, finer-grain integral control
+        float err = (avg - ictl_sp);
+        float incr = err * ictlInfo.i_coeff;
+        ictlInfo.accum += incr;
+        if (ictlInfo.accum < -50000) ictlInfo.accum = -50000;
+        if (ictlInfo.accum > 5000) ictlInfo.accum = 5000;
+
+        float level = (ictlInfo.accum + ictlInfo.p_coeff * err) / 100000;
+        if(level > 0.3) level = 0.3;
+        if(level < -0.3) level = -0.3;
+        ui_state.level = level; // convert to duty cycle (scale 100) from PWM level with scale 1000
+
         if((offset&0x7F) == 0) {
-            if(err > 4) incr += 1;
-            if(err < -4) incr += -1;
-            if(!ui_state.is_streaming) printf("%d %d %d\n", err, incr, ui_state.level);
+            if(!ui_state.is_streaming) printf("ERR %.3f INCR %.3f ACC %.3f LVL %.3f\n", err, incr, ictlInfo.accum, ui_state.level);
         }
-        ui_state.level += incr;
-        if (ui_state.level < -110) ui_state.level = -110;
-        if (ui_state.level > -10) ui_state.level = -10;
-        mphb_set_dlevel_all(ui_state.level);
+        mphb_set_dlevel_all_spatial_dithering(ui_state.level);
+        //mphb_set_dlevel_all(ui_state.level);
 
 
         sio_hw->gpio_hi_togl |= (1U<<(ADPC_PIN_LED-32));

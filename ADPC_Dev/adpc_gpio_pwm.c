@@ -3,7 +3,7 @@
 
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
-
+#include <stdio.h>
 
 mphb2_gpio_pwm_t hb_1B = {
         .pwm_a_pin = PWM_B_1_PIN,
@@ -122,6 +122,22 @@ void mphb_set_dlevel(mphb_port_t i, int dlevel) {
 void mphb_set_dlevel_all(int dlevel) {
     for(mphb_port_t i = 0; i<6; i++) {
         mphb_set_dlevel(i, dlevel);
+    }
+}
+
+void mphb_set_dlevel_all_spatial_dithering(float d) {
+    float Nph = 0; // number of active phases
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) Nph += mphb2_arr[i]->ph_en;
+//    printf("%d\n",Nph);
+    float n = 0;
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(!mphb2_arr[i]->ph_en) continue; // only do active phases.
+        // convert to PWM value
+        float flevel = (500*d + (1+n)/(2*Nph));
+//        printf("%.2f\t",flevel);
+         mphb_set_dlevel(i, (int) flevel);
+//        printf("%d\n",level);
+        n++;
     }
 }
 

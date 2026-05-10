@@ -21,7 +21,7 @@ struct ictl_prog {
 typedef struct {
     char ui[UI_BUFF_SIZE];
     char ui_cursor;
-    int level;
+    float level;
     float current_setpoint;
     bool initialized;
     bool is_streaming;
