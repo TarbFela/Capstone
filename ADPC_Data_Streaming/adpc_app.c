@@ -48,35 +48,29 @@ app_result_t app_dispatch(app_state_t *s) {
             if(!s->is_streaming) printf("Level is %.1f\n",s->level);
             return APP_OK;
         }
-        int level = atoi(ui + 6);
+        float level = atof(ui + 6);
         if(ictl_level_bounds_check(level)) {
             if(!s->is_streaming) printf("Level is out of bounds!\n");
             return APP_INVALID_ARG;
         }
-        mphb_set_dlevel_all(level);
         s->level = level;
-        if(!s->is_streaming) printf("[set level to %d]\n",level);
+        mphb_set_dlevel_all(level * MPHB_PWM_WRAP);
+        if(!s->is_streaming) printf("[set level to %.4f%%]\n",100*level);
         return APP_OK;
     }
     if(strncmp(s->ui, "isp ",4) == 0) {
         app_cmd_isp(s,  atof(s->ui + 4));
     }
     if(strncmp(ui,"phen",4) == 0) {
-        mphb_set_ph_en(HB1B, true);
-        mphb_set_ph_en(HB2B, true);
-        mphb_set_ph_en(HB3B, true);
+        mphb_set_ph_en_all(true);
         printf("[set ph_en ENABLED]\n");
     }
     if(strncmp(ui,"phd",3) == 0) {
-        mphb_set_ph_en(HB1B, false);
-        mphb_set_ph_en(HB2B, false);
-        mphb_set_ph_en(HB3B, false);
+        mphb_set_ph_en_all(false);
         printf("[set ph_en DISABLED]\n");
     }
     if(strncmp(ui,"pwmen",5) == 0) {
-        mphb_set_pwm_en(HB1B, true);
-        mphb_set_pwm_en(HB2B, true);
-        mphb_set_pwm_en(HB3B, true);
+        mphb_set_pwm_en_all(true);
         printf("[set pwm_en ENABLED]\n");
     }
     if(strncmp(ui,"pwmd",4) == 0) {
@@ -86,14 +80,10 @@ app_result_t app_dispatch(app_state_t *s) {
     if(strncmp(ui,"start",5) == 0) {
         if(adpc_init() != APP_OK) return APP_ERROR;
         s->initialized = true;
-        mphb_set_pwm_en(HB1B, true);
-        mphb_set_pwm_en(HB2B, true);
-        mphb_set_pwm_en(HB3B, true);
+        mphb_set_pwm_en_all(true);
         printf("[set pwm_en ENABLED]\n");
         mphb_set_dlevel_all(0);
-        mphb_set_ph_en(HB1B, true);
-        mphb_set_ph_en(HB2B, true);
-        mphb_set_ph_en(HB3B, true);
+        mphb_set_ph_en_all(true);
         printf("[set ph_en ENABLED]\n");
         return APP_OK;
 
