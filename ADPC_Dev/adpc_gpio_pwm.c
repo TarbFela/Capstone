@@ -3,7 +3,7 @@
 
 #include "hardware/gpio.h"
 #include "hardware/pwm.h"
-
+#include <stdio.h>
 
 mphb2_gpio_pwm_t hb_1B = {
         .pwm_a_pin = PWM_B_1_PIN,
@@ -50,6 +50,10 @@ mphb2_gpio_pwm_t *mphb2_arr[6] = {
         &hb_2B,
         &hb_3B
         };
+
+const char *mphb_port_names[] = {
+"HB1A", "HB2A", "HB3A", "HB1B", "HB2B", "HB3B"
+};
 
 volatile uint32_t mphb_pwm_cm_level = MPHB_PWM_WRAP/2;
 
@@ -125,15 +129,58 @@ void mphb_set_dlevel_all(int dlevel) {
     }
 }
 
+// takes a -1.0 to 1.0 duty cycle float and sets the levels among **phase-enabled* phases
+// so that they are dithered *around* that duty cycle.
+void mphb_set_dlevel_all_spatial_dithering(float d) {
+    float Nph = 0; // number of active phases
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) Nph += mphb2_arr[i]->ph_en;
+//    printf("%d\n",Nph);
+    float n = 0;
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(!mphb2_arr[i]->ph_en) continue; // only do active phases.
+        // convert to PWM value
+        // TODO: 500 is hardcoded and also... wrong?
+        float flevel = (500*d + (1+n)/(2*Nph));
+//        printf("%.2f\t",flevel);
+         mphb_set_dlevel(i, (int) flevel);
+//        printf("%d\n",level);
+        n++;
+    }
+}
+
 
 void mphb_set_ph_en(mphb_port_t i, bool enable) {
     gpio_put(mphb2_arr[i]->ph_en_pin, enable);
     mphb2_arr[i]->ph_en = enable;
 }
 
+// sets the enable for all **initialized** items.
+void mphb_set_ph_en_all(bool enable) {
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(mphb2_arr[i]->initialized) mphb_set_ph_en(i,enable);
+    }
+}
+
 void mphb_set_pwm_en(mphb_port_t i, bool enable) {
     pwm_set_enabled(mphb2_arr[i]->slice, enable);
     mphb2_arr[i]->pwm_en = enable;
+}
+
+// sets the enable for all **initialized** items.
+void mphb_set_pwm_en_all(bool enable) {
+    for(mphb_port_t i = HB1A; i<=HB3B; i++) {
+        if(mphb2_arr[i]->initialized) mphb_set_pwm_en(i,enable);
+    }
+}
+
+// NOTE: doesn't seem to work; pins are not pulled high enough.
+// note that this disables a phase briefly!!
+bool mphb_detect_connection(mphb_port_t i) {
+    gpio_set_dir(mphb2_arr[i]->ph_en_pin,GPIO_IN);
+    sleep_ms(100);
+    bool val = gpio_get(mphb2_arr[i]->ph_en_pin);
+    gpio_set_dir(mphb2_arr[i]->ph_en_pin,GPIO_OUT);
+    return val;
 }
 
 

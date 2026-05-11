@@ -21,6 +21,8 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     PIO pio;
     static int call_count = 0;
     uint irqn;
+    // don't re-initialize.
+    if(s->initialized) return;
     if(call_count == 0) {
         pio = pio0;
         call_count++;
@@ -102,6 +104,7 @@ void mcp_pio_init(mcp_pio_t *s,mcp_info_t *mcp,uint32_t *sample_buff, void (*dma
     s->dma_b = dma_b;
     s->buff = sample_buff;
     s->irqn = irqn;
+    s->initialized = true;
 }
 
 /*
