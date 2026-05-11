@@ -41,7 +41,7 @@ These coefficients are calibration values for a *specific physical setup* (a spe
 
 ### 4. There is no over-current shutdown in firmware
 
-If the controller becomes unstable (e.g. because someone set bad PI coefficients with `coeff i` / `coeff p`), nothing in firmware will save the hardware. The hardware does have current-sense and fuse protection at the board level, but you should not rely on that for software bugs.
+If the controller becomes unstable (e.g. because someone set bad PI coefficients with `coeff i` / `coeff p`), nothing in firmware will save the hardware. 
 
 Practical mitigation: **start with `phen` off, then enable** after you've verified the level is sensible:
 ```
