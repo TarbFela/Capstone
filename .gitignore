@@ -9,3 +9,6 @@ build/
 
 # Claude Code sessions
 .claude/
+
+# Personal scratch — keep untracked
+MSIF_dev/MSIF_Docs/whatever/
