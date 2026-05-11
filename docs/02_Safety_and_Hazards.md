@@ -50,15 +50,8 @@ Practical mitigation: **start with `phen` off, then enable** after you've verifi
 >> phen           ← only after confirming
 ```
 
-### 5. `q` is not a soft reboot — it puts the chip into firmware-flash mode
 
-If someone hits `q` thinking they're restarting the firmware, the firmware **stops running** and the USB device re-enumerates as a mass-storage device. PWM, PH_EN, and all output state at the moment of the `q` press persist as whatever the hardware retained, and the firmware will not service any further commands until new code is flashed.
-
-This is *intentional* — it makes flashing easy during development — but operators should know that `q` means "I am done and ready to flash new firmware."
-
-To safely shut down the outputs *first*, run `phd` and `pwmd` before `q`.
-
-### 6. The RUN button is a hard reset
+### 5. The RUN button is a hard reset
 
 Useful when the firmware is stuck (hung in a busy-wait, etc.) without wanting to reflash. It does not save state — DMAs are aborted mid-transfer, the USB session drops, etc. Generally safe to use because the MPHB-002 hardware should bring outputs to zero when PWM stops, but verify on your specific setup.
 
@@ -82,7 +75,7 @@ In practice the writes are infrequent enough and the consequences of one bad val
 
 **However:** there is a subtle window where the ISR has updated `dma_last_written` but the DMA `transfer_count` register hasn't yet been re-initialized for the next half. Code that mixes `dma_last_written` and `dma_channel_hw_addr(...)->transfer_count` (as `core1_ictl()` does) must guard against this — the existing code uses a `goto start` to retry whenever it detects an inconsistency. If you write new code that consumes these globals, follow the same pattern.
 
-### 3. DMA buffer indexing is genuinely confusing
+### 3. DMA buffer indexing is a little confusing
 
 The buffers are arranged as one contiguous block of `2 × DMA_BUFF_SIZE` samples, with buffer A in the lower half and buffer B in the upper half. To compute the current write position you have to flip the meaning of `lw_current`:
 
@@ -96,10 +89,6 @@ int current_base = (2 - lw_current) * DMA_BUFF_SIZE;
 ```
 
 The previous author originally wrote `((2 - lw_current) * DMA_BUFF_SIZE + DMA_BUFF_SIZE + ...) & mask`, which silently reads from the wrong buffer — this was a real bug, found by hand, and the fix went into `core1_ictl()`. If you copy this pattern elsewhere, double-check by walking through both cases.
-
-### 4. `getchar_timeout_us(1000)` blocks for up to 1 ms
-
-The shell loop polls USB CDC with a 1-millisecond timeout per character. This is fine for the shell itself but means the *main core does almost nothing during the shell* — including not flushing USB writes. If you add code that needs to run at higher rate than 1 kHz from core 0, either drop the timeout or move it off core 0.
 
 ### 5. `printf()` from inside the streaming loop will corrupt the data
 
@@ -131,10 +120,6 @@ The DMA IRQ handlers in `adpc_app_funcs.c` are short, but at one point there was
 - Make the system's worst-case latency unpredictable.
 
 If you need to post-process samples (sign extension, scaling, decimation), do it on core 1, not in the ISR.
-
-### 9. Floating-point math in the control loop has limited resolution
-
-`ui_state.level` is now a `float`, but it eventually gets cast to `int` when it's written into the PWM hardware. Tiny per-iteration corrections smaller than 1 PWM count get truncated. If you change the control law, watch out for situations where the integral term should be slowly winding up but isn't, because each contribution is rounding to zero.
 
 ### 10. The `src2/` and `*_Dev/` directories contain stale code
 
