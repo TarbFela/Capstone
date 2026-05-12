@@ -23,6 +23,7 @@
 #include "../ADPC_Dev/ADPC_ADC.h"
 #include "../ADPC_Dev/adpc_gpio_pwm.h"
 #include "adpc_core1.h"
+#include "../ADPC_Dev/adpc_vsns.h"
 
 #include "adpc_app.h"
 
@@ -85,6 +86,10 @@ app_result_t adpc_init() {
         return ada_status;
     }
 
+    printf("Initializing ADPC VSNS Amplifier\n");
+    adpc_vsns_init();
+    printf("ADPC VSNS gain set to 0.196V/V\n");
+
     sleep_ms(109); // idk if its necessary...
 
     printf("Starting ADC PIOs...\n");
@@ -97,6 +102,7 @@ app_result_t adpc_init() {
         return APP_ERROR;
     }
     printf("ADC PIOs initialized.\n");
+
 
     printf("Initializing MPHB connection(s)\n");
     for(mphb_port_t i = HB1A; i<=HB3B; i++) {
