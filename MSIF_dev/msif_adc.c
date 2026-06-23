@@ -1,41 +1,3 @@
-/*
- * msif_adc.c — board-level wrapper for the MCP3462RT EC-voltage ADC.
- *
- * NOTE on units: this reads a VOLTAGE (the QMS post-amp output at QDP
- * EC+/EC-), not a current. The QMS-112 does I->V conversion internally
- * (manual sec 9.2.3); we just digitize the result. v_ec in the sample
- * struct is volts at the QDP EC- pin. To recover ion current in amps,
- * multiply by the per-RANGE/GAIN transfer factor from manual sec 10.2.1.1
- * / sec 9.1.2.3 — that table is not yet in firmware.
- *
- * Signal chain (MS ANALOG IN side of the MSIF Main schematic):
- *   QDP EC-  ->  U19.5 OPA4197 unity buffer  ->  EC-_BUFF
- *   QDP EC- and EC-_BUFF  ->  INA146 diff amp (U16 or U17)  ->  ADC VIN+/VIN-
- *
- * The ADC reads the differential voltage across the INA146 output pair,
- * proportional to the voltage at QDP EC- (up to MSIF_ADC_INPUT_GAIN, which
- * is a bench-measured constant — see msif_adc.h).
- *
- * SPI BUS SHARING: SPI0, SCK/MOSI/MISO shared with the DAC80504. DAC is
- * mode 1 (CPOL=0, CPHA=1), ADC is mode 0 (CPOL=0, CPHA=0). Every public
- * function here starts with claim_spi_for_adc(). msif_analog.c's public
- * functions do the mirror-image claim_spi_for_dac(). That means app code
- * can interleave msif_set_fmass_v() and msif_adc_read_ec() freely.
- *
- * OPEN ITEMS (resolve at the bench):
- *   - MUX channel assignment is a guess (CH0+/CH1- differential). If the
- *     first read returns noise or zero, try other MCP_MUX_VAL_CHn pairings.
- *   - MSIF_ADC_INPUT_GAIN is set to 1.0 until a known DC voltage is injected
- *     at QDP EC- and the ADC-input ratio is measured. Update MSIF_cfg.h
- *     once you have real numbers.
- *   - Sign convention at EC: ions on the collector produce a defined-polarity
- *     swing at the QMS post-amp output. With CH0+/CH1- wired as assumed, a
- *     positive ADC code is intended to mean "the QMS post-amp is showing
- *     ions on the collector," but the actual sign has to be confirmed at
- *     the bench against a known polarity input — and re-confirmed under
- *     real ions, because injected DC and post-amp output may differ in sign.
- */
-
 #include "msif_adc.h"
 
 #include <stdio.h>
@@ -73,19 +35,19 @@ void msif_adc_init(void) {
 
     /* mcp_spi_init re-runs spi_init at a fixed 500 kHz and re-applies mode 0.
      * It's safe to call after the DAC init because every later DAC access
-     * re-asserts mode 1 anyway. */
+     * re-asserts mode 1 anyway.
+     *
+     * Last positional argument is mclk_pin — only used if mcp_mclk_init() is
+     * subsequently called to set up an external PWM-driven master clock for
+     * the ADC. We use the chip's internal clock (MCP_CFG0_CLK_SEL_INTERNAL
+     * below), so we pass -1 and never call mcp_mclk_init(). */
     mcp_spi_init(&s_adc, MSIF_ADC_SPI,
                  MSIF_DAC_SDI_PIN,   /* shared MOSI (GPIO 35) */
                  MSIF_DAC_SDO_PIN,   /* shared MISO (GPIO 36) */
                  MSIF_ADC_CS_PIN,    /* unique ADC CS# (GPIO 37) */
                  MSIF_DAC_SCK_PIN,   /* shared SCK  (GPIO 38) */
-                 MSIF_ADC_IRQ_PIN);  /* nIRQ        (GPIO 32) */
-
-    /* Driver workaround: this snapshot of mcp3x6xR.c stores every GPIO pin
-     * into s_adc but forgets to copy the spi_inst_t* into s_adc.spi. Every
-     * later bus operation reads s_adc.spi — without this line they'd all
-     * dereference NULL. Newer driver versions fix this in mcp_spi_init. */
-    s_adc.spi = MSIF_ADC_SPI;
+                 MSIF_ADC_IRQ_PIN,   /* nIRQ        (GPIO 32) */
+                 -1);                /* no external MCLK on MSIF */
 
     /* Configure CFG0..CFG3 directly. We could call mcp_configure() but this
      * snapshot of the driver only writes 3 of 4 CFG registers and does a
@@ -112,7 +74,9 @@ void msif_adc_init(void) {
     cfg[1] = MCP_CFG1_AMCLK_PRESCALE_NONE | MCP_CFG1_OSR_256;
     cfg[2] = MCP_CFG2_BIAS_CURRENT_SEL_1
            | MCP_CFG2_ADC_GAIN_SEL_1
-           | 0x01u;   /* CFG2 bit 0 reserved, must be 1 per datasheet */
+           | MCP_CFG2_AUTO_ZERO_REF_EN 
+           | MCP_CFG2_AUTO_ZERO_MUX_EN 
+           | 0x03u;   /* CFG2 bit 0 reserved, must be 1 per datasheet */
     cfg[3] = MCP_CFG3_CONV_MODE_ONE_SHOT_STDBY;  /* DATA_FORMAT bits = 0x0 */
 
     mcp_write_regs(&s_adc, cfg, 4, MCP_REG_ADDR_CONFIG0);
@@ -120,7 +84,7 @@ void msif_adc_init(void) {
     /* MUX: assumed QDP EC- path lands at CH0/CH1 differential. Bench test
      * with a known DC source at EC- will confirm this pairing — update
      * here if the schematic/bench disagree. */
-    mcp_mux_sel(&s_adc, MCP_MUX_VAL_CH0, MCP_MUX_VAL_CH1);
+    mcp_mux_sel(&s_adc, MCP_MUX_VAL_CH2, MCP_MUX_VAL_CH1);
 
     s_adc_init_done = true;
 }
