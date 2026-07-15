@@ -1,3 +1,41 @@
+/*
+ * msif_adc.c — board-level wrapper for the MCP3462RT EC-voltage ADC.
+ *
+ * NOTE on units: this reads a VOLTAGE (the QMS post-amp output at QDP
+ * EC+/EC-), not a current. The QMS-112 does I->V conversion internally
+ * (manual sec 9.2.3); we just digitize the result. v_ec in the sample
+ * struct is volts at the QDP EC- pin. To recover ion current in amps,
+ * multiply by the per-RANGE/GAIN transfer factor from manual sec 10.2.1.1
+ * / sec 9.1.2.3 — that table is not yet in firmware.
+ *
+ * Signal chain (MS ANALOG IN side of the MSIF Main schematic):
+ *   QDP EC-  ->  U19.5 OPA4197 unity buffer  ->  EC-_BUFF
+ *   QDP EC- and EC-_BUFF  ->  INA146 diff amp (U16 or U17)  ->  ADC VIN+/VIN-
+ *
+ * The ADC reads the differential voltage across the INA146 output pair,
+ * proportional to the voltage at QDP EC- (up to MSIF_ADC_INPUT_GAIN, which
+ * is a bench-measured constant — see msif_adc.h).
+ *
+ * SPI BUS SHARING: SPI0, SCK/MOSI/MISO shared with the DAC80504. DAC is
+ * mode 1 (CPOL=0, CPHA=1), ADC is mode 0 (CPOL=0, CPHA=0). Every public
+ * function here starts with claim_spi_for_adc(). msif_analog.c's public
+ * functions do the mirror-image claim_spi_for_dac(). That means app code
+ * can interleave msif_set_fmass_v() and msif_adc_read_ec() freely.
+ *
+ * OPEN ITEMS (resolve at the bench):
+ *   - MUX channel assignment is a guess (CH2+/CH1- differential). If the
+ *     first read returns noise or zero, try other MCP_MUX_VAL_CHn pairings.
+ *   - MSIF_ADC_INPUT_GAIN is set to 1.0 until a known DC voltage is injected
+ *     at QDP EC- and the ADC-input ratio is measured. Update MSIF_cfg.h
+ *     once you have real numbers.
+ *   - Sign convention at EC: ions on the collector produce a defined-polarity
+ *     swing at the QMS post-amp output. With CH2+/CH1- wired as assumed, a
+ *     positive ADC code is intended to mean "the QMS post-amp is showing
+ *     ions on the collector," but the actual sign has to be confirmed at
+ *     the bench against a known polarity input — and re-confirmed under
+ *     real ions, because injected DC and post-amp output may differ in sign.
+ */
+
 #include "msif_adc.h"
 
 #include <stdio.h>
@@ -58,8 +96,8 @@ void msif_adc_init(void) {
      *          no sensor bias current, ADC_MODE = conversion (fast cmds will
      *          toggle this into standby/conv as needed).
      *   CFG1 = no prescale, OSR = 256 (default — ~20 kHz sample rate).
-     *   CFG2 = bias current x1, gain x1, auto-zero off, bit 0 = 1 (the
-     *          datasheet's "reserved, must be 1" bit).
+     *   CFG2 = bias current x1, gain x1, auto-zero on (REF + MUX), bit 0 = 1
+     *          (the datasheet's "reserved, must be 1" bit).
      *   CFG3 = one-shot conversion ending in standby, DATA_FORMAT = 0x0
      *          (16-bit output — mandatory for the MCP3462R on this board;
      *          leaving it at reset-default 24-bit would silently mis-align
@@ -81,10 +119,12 @@ void msif_adc_init(void) {
 
     mcp_write_regs(&s_adc, cfg, 4, MCP_REG_ADDR_CONFIG0);
 
-    /* MUX: assumed QDP EC- path lands at CH0/CH1 differential. Bench test
+    /* MUX: assumed QDP EC- path lands at CH2/CH1 differential. Bench test
      * with a known DC source at EC- will confirm this pairing — update
      * here if the schematic/bench disagree. */
-    mcp_mux_sel(&s_adc, MCP_MUX_VAL_CH2, MCP_MUX_VAL_CH1);
+    mcp_mux_sel(&s_adc, MCP_MUX_VAL_CH2, MCP_MUX_VAL_CH0);
+
+    // 7/15 - could still check the different channels with the new wiring setup??? 
 
     s_adc_init_done = true;
 }
