@@ -1,6 +1,12 @@
 /*
  * msif_adc.c — board-level wrapper for the MCP3462RT EC-voltage ADC.
  *
+ * WHERE THINGS LIVE: the MSIF firmware is Capstone/MSIF_dev/ (this dir).
+ * It leans on the shared drivers in Capstone/src2/ — mcp3x6xR_driver/ is
+ * the low-level driver for THIS ADC, ada4255_driver/ is the PGIA — so the
+ * build breaks if src2/ goes missing. Build output (msif_dev.uf2) lands in
+ * MSIF_dev/build/. The uf2 built 2026-07-01 == commit 1844202 exactly.
+ *
  * NOTE on units: this reads a VOLTAGE (the QMS post-amp output at QDP
  * EC+/EC-), not a current. The QMS-112 does I->V conversion internally
  * (manual sec 9.2.3); we just digitize the result. v_ec in the sample
@@ -22,18 +28,6 @@
  * functions do the mirror-image claim_spi_for_dac(). That means app code
  * can interleave msif_set_fmass_v() and msif_adc_read_ec() freely.
  *
- * OPEN ITEMS (resolve at the bench):
- *   - MUX channel assignment is a guess (CH2+/CH1- differential). If the
- *     first read returns noise or zero, try other MCP_MUX_VAL_CHn pairings.
- *   - MSIF_ADC_INPUT_GAIN is set to 1.0 until a known DC voltage is injected
- *     at QDP EC- and the ADC-input ratio is measured. Update MSIF_cfg.h
- *     once you have real numbers.
- *   - Sign convention at EC: ions on the collector produce a defined-polarity
- *     swing at the QMS post-amp output. With CH2+/CH1- wired as assumed, a
- *     positive ADC code is intended to mean "the QMS post-amp is showing
- *     ions on the collector," but the actual sign has to be confirmed at
- *     the bench against a known polarity input — and re-confirmed under
- *     real ions, because injected DC and post-amp output may differ in sign.
  */
 
 #include "msif_adc.h"
@@ -119,9 +113,7 @@ void msif_adc_init(void) {
 
     mcp_write_regs(&s_adc, cfg, 4, MCP_REG_ADDR_CONFIG0);
 
-    /* MUX: assumed QDP EC- path lands at CH2/CH1 differential. Bench test
-     * with a known DC source at EC- will confirm this pairing — update
-     * here if the schematic/bench disagree. */
+    /* MUX: seems to work with CH2+/CH0- differential, but nonlinear relationship between read voltage and actual input from bench PSU */
     mcp_mux_sel(&s_adc, MCP_MUX_VAL_CH2, MCP_MUX_VAL_CH0);
 
     // 7/15 - could still check the different channels with the new wiring setup??? 
